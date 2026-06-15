@@ -1,0 +1,22 @@
+{
+  "name": "agentsphere",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AgentSphere — virtual AI-agent workspace. Multi-model agents research, analyze, debate and recommend in a real-time pixel campus.",
+  "type": "module",
+  "workspaces": [
+    "services/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n policy,runtime,orchestrator,gateway,frontend -c blue,magenta,yellow,green,cyan \"npm run dev -w services/mcp-policy\" \"npm run dev -w services/agent-runtime\" \"npm run dev -w services/orchestrator\" \"npm run dev -w services/gateway\" \"npm run dev -w services/frontend\"",
+    "dev:backend": "concurrently -n policy,runtime,orchestrator,gateway -c blue,magenta,yellow,green \"npm run dev -w services/mcp-policy\" \"npm run dev -w services/agent-runtime\" \"npm run dev -w services/orchestrator\" \"npm run dev -w services/gateway\"",
+    "build": "npm run build -w services/frontend",
+    "start": "npm run dev",
+    "memory:provision": "npm run memory:provision -w services/agent-runtime",
+    "memory:health": "npm run memory:health -w services/agent-runtime"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "playwright": "^1.60.0"
+  }
+}

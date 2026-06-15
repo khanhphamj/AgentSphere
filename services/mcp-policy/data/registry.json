@@ -1,0 +1,236 @@
+{
+  "servers": [
+    {
+      "id": "mcp-web",
+      "label": "Web research",
+      "transport": "streamable-http",
+      "url": "internal://mcp-web",
+      "tools": [
+        {
+          "name": "web.search",
+          "description": "Search the public web and return ranked results with snippets."
+        },
+        {
+          "name": "web.fetch",
+          "description": "Fetch a URL and return readable page content."
+        }
+      ]
+    },
+    {
+      "id": "mcp-knowledge",
+      "label": "Knowledge Base (tenant)",
+      "transport": "streamable-http",
+      "url": "internal://mcp-knowledge",
+      "tools": [
+        {
+          "name": "kb.query",
+          "description": "Semantic search over the tenant Knowledge Base (RAG)."
+        },
+        {
+          "name": "kb.document",
+          "description": "Read a full indexed document by id."
+        }
+      ]
+    },
+    {
+      "id": "mcp-data",
+      "label": "Data & analytics",
+      "transport": "streamable-http",
+      "url": "internal://mcp-data",
+      "tools": [
+        {
+          "name": "data.metrics",
+          "description": "Query internal metrics: cost, latency, adoption, market sizing."
+        },
+        {
+          "name": "data.benchmark",
+          "description": "Run a benchmark comparison across options and return a score table."
+        },
+        {
+          "name": "data.simulate",
+          "description": "Run a Monte Carlo simulation (GBM, dollar-cost averaging): monthlyAmount, months, annualReturnPct, annualVolPct, initialAmount → final-value percentiles and probability of profit"
+        }
+      ]
+    },
+    {
+      "id": "mcp-market",
+      "label": "Market intelligence",
+      "transport": "streamable-http",
+      "url": "internal://mcp-market",
+      "tools": [
+        {
+          "name": "market.trends",
+          "description": "Trend lines and adoption curves for a topic or sector."
+        },
+        {
+          "name": "market.competitors",
+          "description": "Competitor / alternative landscape for a topic."
+        },
+        {
+          "name": "market.quote",
+          "description": "Real quote for a Vietnamese stock symbol (DNSE/Yahoo): last close, 3-month return, high/low"
+        },
+        {
+          "name": "market.history",
+          "description": "Real daily price history for a Vietnamese stock (symbol, months) → period return, annualized return and volatility"
+        }
+      ]
+    },
+    {
+      "id": "mcp-risk",
+      "label": "Risk & compliance",
+      "transport": "streamable-http",
+      "url": "internal://mcp-risk",
+      "tools": [
+        {
+          "name": "risk.checklist",
+          "description": "Evaluate a proposal against the standard risk checklist (financial, technical, compliance)."
+        },
+        {
+          "name": "risk.precedents",
+          "description": "Find prior incidents / failed precedents related to a proposal."
+        }
+      ]
+    },
+    {
+      "id": "mcp-docs",
+      "label": "Document authoring",
+      "transport": "streamable-http",
+      "url": "internal://mcp-docs",
+      "tools": [
+        {
+          "name": "docs.compose",
+          "description": "Compose a structured report section from bullet inputs."
+        },
+        {
+          "name": "docs.export",
+          "description": "Export the final report (markdown) to the workspace."
+        }
+      ]
+    }
+  ],
+  "policyGroups": [
+    {
+      "id": "pg-orchestrator",
+      "label": "Orchestrator — planning only",
+      "description": "The lead plans and routes; it never touches external tools directly.",
+      "grants": []
+    },
+    {
+      "id": "pg-research",
+      "label": "Research — web + knowledge",
+      "description": "Full read access to public web and the tenant Knowledge Base.",
+      "grants": [
+        {
+          "server": "mcp-web",
+          "tools": [
+            "*"
+          ]
+        },
+        {
+          "server": "mcp-knowledge",
+          "tools": [
+            "*"
+          ]
+        },
+        {
+          "server": "mcp-market",
+          "tools": [
+            "market.trends"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pg-analyst",
+      "label": "Analyst — data & benchmarks",
+      "description": "Metrics, benchmarks and KB lookups. No open-web access.",
+      "grants": [
+        {
+          "server": "mcp-data",
+          "tools": [
+            "*"
+          ]
+        },
+        {
+          "server": "mcp-market",
+          "tools": [
+            "*"
+          ]
+        },
+        {
+          "server": "mcp-knowledge",
+          "tools": [
+            "kb.query"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pg-critic",
+      "label": "Critic — risk & precedents",
+      "description": "Risk checklists, precedent search and read-only KB.",
+      "grants": [
+        {
+          "server": "mcp-risk",
+          "tools": [
+            "*"
+          ]
+        },
+        {
+          "server": "mcp-knowledge",
+          "tools": [
+            "kb.query"
+          ]
+        },
+        {
+          "server": "mcp-web",
+          "tools": [
+            "web.fetch"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pg-creative",
+      "label": "Creative — trends & knowledge",
+      "description": "Inspiration sources: trends and the Knowledge Base.",
+      "grants": [
+        {
+          "server": "mcp-market",
+          "tools": [
+            "market.trends",
+            "market.competitors"
+          ]
+        },
+        {
+          "server": "mcp-knowledge",
+          "tools": [
+            "kb.query"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pg-reporter",
+      "label": "Reporter — document authoring",
+      "description": "Composes and exports the final report. No research tools.",
+      "grants": [
+        {
+          "server": "mcp-docs",
+          "tools": [
+            "*"
+          ]
+        }
+      ]
+    }
+  ],
+  "roleBindings": {
+    "orchestrator": "pg-orchestrator",
+    "research": "pg-research",
+    "analyst": "pg-analyst",
+    "critic": "pg-critic",
+    "creative": "pg-creative",
+    "reporter": "pg-reporter"
+  }
+}

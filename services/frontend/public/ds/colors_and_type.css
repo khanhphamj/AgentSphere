@@ -1,0 +1,205 @@
+/* ============================================================
+   GreenNode AI — Foundations: Color + Type
+   Source of truth: src/frontend/components/greennode/styles/styles.css
+   "Liquid Glass" enterprise design system · GreenNode (VNG)
+   ============================================================ */
+
+/* --- Webfonts ------------------------------------------------
+   The product prefers Apple system fonts (SF Pro Display / Text)
+   and falls back to Inter Tight / Geist everywhere else. We load
+   Inter Tight + Geist + Geist Mono from Google Fonts so non-Apple
+   environments render the intended geometry. SF Pro stays first in
+   the stack and is used automatically on Apple devices.
+   ------------------------------------------------------------ */
+@import url("https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap");
+
+/* --- SF Pro (Apple system) --------------------------------------
+   SF Pro is Apple's proprietary family and cannot be redistributed,
+   so we register it via local() only — it resolves to the installed
+   font on Apple devices and is silently skipped elsewhere, where the
+   token's fallback stack (Inter Tight / Geist) takes over. When the
+   licensed font files are uploaded, add url() sources below.
+   ---------------------------------------------------------------- */
+@font-face {
+  font-family: "SF Pro Display";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: local("SF Pro Display"), local("SFProDisplay-Regular"), local("-apple-system");
+}
+@font-face {
+  font-family: "SF Pro Text";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: local("SF Pro Text"), local("SFProText-Regular"), local("-apple-system");
+}
+
+:root {
+  /* ---- Brand palette — GreenNode 2026 ---- */
+  --gn-green: #2DB65F;          /* primary brand green */
+  --gn-green-bright: #4EAF73;   /* medium muted green */
+  --gn-green-deep: #1F8A48;     /* deep / text accent (use on light) */
+  --gn-green-mint: #8EDEAC;     /* light mint */
+  --gn-green-tint: #C5EDD5;     /* pale mint */
+  --gn-green-wash: #EEFAF4;     /* near-white mint surface */
+
+  /* The "vivid" gradient pair used on primary CTAs + avatars.
+     Brighter and more saturated than --gn-green; reserved for
+     filled buttons, the New-chat button, send button, user avatar. */
+  --gn-vivid-top: #1ED760;
+  --gn-vivid-bot: #00B14F;
+
+  /* ---- Neutral / ink ramp ---- */
+  --ink:   #353535;   /* primary text */
+  --ink-2: #4A4A4A;
+  --ink-3: #6B6B6B;
+  --ink-4: #A4A4A4;   /* secondary / placeholder text */
+  --ink-5: #C8C8C8;
+  --line: rgba(53, 53, 53, 0.08);          /* hairline border */
+  --line-strong: rgba(53, 53, 53, 0.14);
+
+  /* ---- Surfaces ---- */
+  --bg:    #F5F8F5;   /* app background (cool mint-white) */
+  --bg-2:  #EEFAF4;   /* secondary tinted surface */
+  --paper: #FFFFFF;   /* solid card / modal */
+
+  /* ---- Semantic status ---- */
+  --status-ok:      #1F8A48;  /* ready / indexed (brand green deep) */
+  --status-warn:    #C77700;  /* ingesting / amber */
+  --status-danger:  #DC2626;  /* failed / destructive */
+  --status-info:    #2563EB;  /* informational blue */
+
+  /* File-type accents (vendor-recognized solids) */
+  --file-pdf:  #DC2626;
+  --file-docx: #2563EB;
+  --file-xlsx: #16A34A;
+  --file-pptx: #B7472A;
+  --file-text: #6B7280;
+
+  /* ============================================================
+     Liquid Glass surface tokens
+     ============================================================ */
+  --glass-bg:        rgba(255, 255, 255, 0.55);
+  --glass-bg-strong: rgba(255, 255, 255, 0.72);
+  --glass-bg-soft:   rgba(255, 255, 255, 0.38);
+  --glass-border:        rgba(255, 255, 255, 0.78);
+  --glass-border-inner:  rgba(255, 255, 255, 0.95);
+  --glass-blur: blur(28px) saturate(180%); /* @kind other */
+  --glass-blur-strong: blur(40px) saturate(200%); /* @kind other */
+  --glass-shadow: 0 8px 32px -8px rgba(53, 53, 53, 0.18),
+                  0 2px 8px -2px rgba(53, 53, 53, 0.10);
+  --glass-shadow-strong: 0 24px 60px -12px rgba(31, 138, 72, 0.18),
+                         0 8px 20px -6px rgba(31, 138, 72, 0.10);
+  /* The signature inset highlight that gives glass its "lit edge" */
+  --glass-inset: inset 0 1px 0 0 rgba(255,255,255,0.95),
+                 inset 0 -1px 0 0 rgba(255,255,255,0.4);
+
+  /* ============================================================
+     Type system
+     ============================================================ */
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter Tight", "Geist", "Inter", system-ui, sans-serif;
+  --font-body:    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter Tight", "Geist", "Inter", system-ui, sans-serif;
+  --font-mono:    ui-monospace, SFMono-Regular, "SF Mono", "Geist Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* Tracking — display is tight, UI text near-tight */
+  --track-display: -0.022em;
+  --track-body:    -0.011em;
+
+  /* ---- Type scale (px) ----
+     Tuned to the product. UI runs dense (13–15px); display goes large. */
+  --fs-hero:   40px;  /* hero h1 */
+  --fs-h1:     28px;
+  --fs-h2:     20px;
+  --fs-h3:     17px;
+  --fs-title:  15px;  /* card / panel title */
+  --fs-body:   15px;  /* default body / message text */
+  --fs-ui:     13px;  /* secondary UI (history rows, chips) */
+  --fs-meta:   12px;  /* meta, subtitles */
+  --fs-micro:  11px;  /* eyebrows, labels, status */
+  --fs-mono:   13px;
+
+  /* ---- Radii ---- */
+  --r-xs: 6px;
+  --r-sm: 9px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+  --r-2xl: 22px;   /* composer capsule */
+  --r-pill: 999px;
+
+  /* ---- Spacing scale (4px base) ---- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 18px;
+  --sp-6: 22px;
+  --sp-7: 28px;
+  --sp-8: 36px;
+
+  /* ---- Layout constants ---- */
+  --sidebar-w: 288px;
+  --header-h: 64px;
+  --content-max: 880px;
+
+  /* ============================================================
+     Motion — SwiftUI-style spring curves (the "liquid" feel)
+     ============================================================ */
+  --spring-bounce: cubic-bezier(0.34, 1.56, 0.64, 1) /* @kind other */;   /* overshoot / pop */
+  --spring-smooth: cubic-bezier(0.22, 1, 0.36, 1) /* @kind other */;      /* settle, no bounce */
+  --spring-snappy: cubic-bezier(0.5, 1.5, 0.5, 1); /* @kind other */
+  --spring-glass:  cubic-bezier(0.16, 1, 0.3, 1) /* @kind other */;        /* slow glide */
+  --t-fast: 0.22s; /* @kind other */
+  --t-base: 0.45s; /* @kind other */
+  --t-slow: 0.65s; /* @kind other */
+}
+
+/* ============================================================
+   Semantic element styles — apply these classes (or copy the
+   declarations) to get on-brand type without re-deriving values.
+   ============================================================ */
+.gn-hero {
+  font-family: var(--font-display);
+  font-size: var(--fs-hero);
+  line-height: 1.05;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+  text-wrap: pretty;
+}
+.gn-hero .accent { color: var(--gn-green-deep); }
+
+.gn-h1 { font-family: var(--font-display); font-size: var(--fs-h1); font-weight: 700; line-height: 1.15; letter-spacing: var(--track-display); color: var(--ink); }
+.gn-h2 { font-family: var(--font-display); font-size: var(--fs-h2); font-weight: 700; line-height: 1.3;  letter-spacing: var(--track-display); color: var(--ink); }
+.gn-h3 { font-family: var(--font-display); font-size: var(--fs-h3); font-weight: 600; line-height: 1.3;  letter-spacing: -0.01em; color: var(--ink); }
+
+.gn-title { font-family: var(--font-body); font-size: var(--fs-title); font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
+.gn-body  { font-family: var(--font-body); font-size: var(--fs-body); font-weight: 400; line-height: 1.6; letter-spacing: var(--track-body); color: var(--ink); }
+.gn-ui    { font-family: var(--font-body); font-size: var(--fs-ui); font-weight: 500; color: var(--ink-2); }
+.gn-meta  { font-family: var(--font-body); font-size: var(--fs-meta); color: var(--ink-4); }
+
+/* Eyebrow / section label — uppercase, tracked, tiny */
+.gn-eyebrow {
+  font-family: var(--font-body);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-4);
+}
+
+.gn-mono { font-family: var(--font-mono); font-size: var(--fs-mono); font-weight: 400; letter-spacing: 0; }
+
+/* Body defaults — opt in by adding .gn-root to a wrapper */
+.gn-root {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  color: var(--ink);
+  letter-spacing: var(--track-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "ss01", "cv11";
+  text-rendering: optimizeLegibility;
+}

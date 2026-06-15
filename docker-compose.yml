@@ -1,0 +1,95 @@
+name: agentsphere
+
+# AgentSphere microservices:
+#   frontend ──▶ gateway ──▶ orchestrator ──▶ agent-runtime ──▶ mcp-policy
+#                  │              │                                  ▲
+#                  └── WS ◀───────┘ (real-time mission events)       │
+#                                 └──────────────────────────────────┘
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=agentsphere
+      - POSTGRES_PASSWORD=agentsphere
+      - POSTGRES_DB=agentsphere
+    ports:
+      - "5433:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+
+  mcp-policy:
+    build: ./services/mcp-policy
+    environment:
+      - MCP_POLICY_PORT=8083
+      - CLIENT_ID=${CLIENT_ID}
+      - CLIENT_SECRET=${CLIENT_SECRET}
+    ports:
+      - "8083:8083"
+
+  agent-runtime:
+    build: ./services/agent-runtime
+    environment:
+      - AGENT_RUNTIME_PORT=8082
+      - CLIENT_ID=${CLIENT_ID}
+      - CLIENT_SECRET=${CLIENT_SECRET}
+      - MCP_POLICY_URL=http://mcp-policy:8083
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_SIMULATION=${LLM_SIMULATION:-auto}
+      - AGENTBASE_MEMORY=${AGENTBASE_MEMORY:-auto}
+      - MEMORY_ID=${MEMORY_ID:-}
+      - MEMORY_STRATEGY_ID=${MEMORY_STRATEGY_ID:-}
+      - GREENNODE_CLIENT_ID=${GREENNODE_CLIENT_ID:-}
+      - GREENNODE_CLIENT_SECRET=${GREENNODE_CLIENT_SECRET:-}
+      - IAM_TOKEN_URL=${IAM_TOKEN_URL:-}
+      - MEMORY_BASE_URL=${MEMORY_BASE_URL:-}
+    ports:
+      - "8082:8082"
+    depends_on:
+      - mcp-policy
+
+  orchestrator:
+    build: ./services/orchestrator
+    environment:
+      - ORCHESTRATOR_PORT=8081
+      - CLIENT_ID=${CLIENT_ID}
+      - CLIENT_SECRET=${CLIENT_SECRET}
+      - AGENT_RUNTIME_URL=http://agent-runtime:8082
+      - MCP_POLICY_URL=http://mcp-policy:8083
+      - DATABASE_URL=postgres://agentsphere:agentsphere@db:5432/agentsphere
+    ports:
+      - "8081:8081"
+    depends_on:
+      - db
+      - agent-runtime
+
+  gateway:
+    build: ./services/gateway
+    environment:
+      - GATEWAY_PORT=8080
+      - CLIENT_ID=${CLIENT_ID}
+      - CLIENT_SECRET=${CLIENT_SECRET}
+      - ORCHESTRATOR_URL=http://orchestrator:8081
+      - MCP_POLICY_URL=http://mcp-policy:8083
+      - AGENT_RUNTIME_URL=http://agent-runtime:8082
+      - AUTH_ACCEPT_ANY_CODE=${AUTH_ACCEPT_ANY_CODE:-false}
+      - JWT_TTL_HOURS=${JWT_TTL_HOURS:-72}
+      - DATABASE_URL=postgres://agentsphere:agentsphere@db:5432/agentsphere
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+      - orchestrator
+      - mcp-policy
+
+  frontend:
+    build: ./services/frontend
+    environment:
+      - GATEWAY_URL=http://gateway:8080
+    ports:
+      - "5173:80"
+    depends_on:
+      - gateway
+
+volumes:
+  dbdata:

@@ -1,0 +1,16 @@
+{
+  "name": "@agentsphere/agent-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file=../../.env src/index.js",
+    "start": "node src/index.js",
+    "memory:provision": "node --env-file=../../.env src/provisionMemory.js",
+    "memory:health": "node --env-file=../../.env src/memoryHealth.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
+  }
+}
