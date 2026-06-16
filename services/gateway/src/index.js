@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import path from "path";
 import jwt from "jsonwebtoken";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import { users, squads } from "./db.js";
@@ -178,5 +179,11 @@ const wsProxy = createProxyMiddleware({
   }
 });
 app.use("/ws", wsProxy);
+if (process.env.FRONTEND_DIST) {
+  const dist = process.env.FRONTEND_DIST;
+  app.use(express.static(dist));
+  app.get("*", (_req, res) => res.sendFile(path.join(dist, "index.html")));
+  console.log(`[gateway] serving frontend from ${dist}`);
+}
 const server = app.listen(PORT, () => console.log(`[gateway] listening on :${PORT} → orchestrator ${ORCHESTRATOR_URL}, policy ${MCP_POLICY_URL}`));
 server.on("upgrade", wsProxy.upgrade);

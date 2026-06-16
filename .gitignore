@@ -17,3 +17,5 @@ logs/
 .DS_Store
 services/agent-runtime/data/agentbase/
 services/agent-runtime/data/models.json
+
+.greennode.json

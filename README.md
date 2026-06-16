@@ -411,6 +411,34 @@ npm run dev:backend
 
 Docker (full stack): `docker compose up --build` → frontend on http://localhost:5173.
 
+### Deploy to GreenNode AgentBase (all-in-one container)
+
+AgentBase Custom Agent runs **one** container on port 8080 with `/health`, so the
+whole app is packaged into a single image by the root **`Dockerfile`**: it builds
+the frontend, runs the 4 Node backends via `concurrently` under `tini` (see
+**`start.sh`**), and **bundles Postgres** (started in-container by `start.sh`). The
+**gateway** serves the built frontend as static files + SPA fallback when
+`FRONTEND_DIST` is set (so `:8080` serves UI + `/api` + `/ws` + `/health`
+same-origin); this is inert in normal compose mode. `.dockerignore` keeps `.env`
+and `.greennode.json` out of the image.
+
+```bash
+TAG=v$(date +%Y%m%d%H%M%S)
+docker build --platform linux/amd64 -t vcr.vngcloud.vn/<cr-repo>/agentsphere:$TAG .
+bash .claude/skills/agentbase/scripts/cr.sh credentials docker-login
+docker push vcr.vngcloud.vn/<cr-repo>/agentsphere:$TAG
+bash .claude/skills/agentbase/scripts/runtime.sh create --name agentsphere \
+  --image vcr.vngcloud.vn/<cr-repo>/agentsphere:$TAG \
+  --flavor runtime-s2-general-2x4 --env-file .env --from-cr \
+  --network-mode PUBLIC --min-replicas 1 --max-replicas 1
+```
+
+Keep replicas at **1** (the bundled Postgres + in-memory session state are
+per-container). The bundled Postgres is **ephemeral** — its data is lost on pod
+restart/redeploy; for durable storage point `DATABASE_URL` at an external managed
+Postgres in the deploy env file (it overrides the baked localhost one). Redeploys
+use `runtime.sh update <runtime-id> ...` with the same flags.
+
 **Login:** work email → scan the QR with Google Authenticator (first time) →
 enter the 6-digit app code. Re-logins skip straight to the code.
 **First login:** Squad setup — name each agent and pick its model → **Create Squad**.
