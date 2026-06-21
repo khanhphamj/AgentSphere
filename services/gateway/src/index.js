@@ -117,15 +117,16 @@ app.use("/api/models", requireSession, createProxyMiddleware({
   pathRewrite: () => "/models",
   on: withInternalCreds
 }));
-async function pushSquadToOrchestrator(squad) {
-  if (!Array.isArray(squad)) return;
+async function pushSquadToOrchestrator(email, squad) {
+  if (!Array.isArray(squad) || !email) return;
   try {
     await fetch(`${ORCHESTRATOR_URL}/squad`, {
       method: "PUT",
       headers: {
         "content-type": "application/json",
         "x-client-id": CLIENT_ID,
-        "x-client-secret": CLIENT_SECRET
+        "x-client-secret": CLIENT_SECRET,
+        "x-user-email": email
       },
       body: JSON.stringify({
         squad
@@ -140,7 +141,7 @@ const squadRouter = express.Router();
 squadRouter.use(express.json());
 squadRouter.get("/", requireSession, async (req, res) => {
   const squad = await squads.get(req.user.email);
-  await pushSquadToOrchestrator(squad);
+  await pushSquadToOrchestrator(req.user.email, squad);
   res.json({
     squad
   });
@@ -151,12 +152,38 @@ squadRouter.put("/", requireSession, async (req, res) => {
     error: "squad array required"
   });
   await squads.save(req.user.email, squad);
-  await pushSquadToOrchestrator(squad);
+  await pushSquadToOrchestrator(req.user.email, squad);
   res.json({
     squad
   });
 });
 app.use("/api/squad", squadRouter);
+app.post("/api/missions", requireSession, express.json(), async (req, res) => {
+  const title = String(req.body?.title || "").trim();
+  if (!title) return res.status(400).json({ error: "title required" });
+  const depth = req.body?.depth === "deep" ? "deep" : "quick";
+  let squad = null;
+  try {
+    squad = await squads.get(req.user.email);
+  } catch {}
+  try {
+    const r = await fetch(`${ORCHESTRATOR_URL}/missions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-client-id": CLIENT_ID,
+        "x-client-secret": CLIENT_SECRET,
+        "x-user-email": req.user.email
+      },
+      body: JSON.stringify({ title, squad, depth }),
+      signal: AbortSignal.timeout(10000)
+    });
+    const json = await r.json().catch(() => ({}));
+    res.status(r.status).json(json);
+  } catch (err) {
+    res.status(502).json({ error: `orchestrator unreachable: ${err.message}` });
+  }
+});
 app.use("/api", requireSession, createProxyMiddleware({
   target: ORCHESTRATOR_URL,
   changeOrigin: true,
@@ -185,5 +212,27 @@ if (process.env.FRONTEND_DIST) {
   app.get("*", (_req, res) => res.sendFile(path.join(dist, "index.html")));
   console.log(`[gateway] serving frontend from ${dist}`);
 }
+app.use((err, _req, res, _next) => {
+  if (err?.type === "entity.parse.failed") return res.status(400).json({ error: "invalid JSON body" });
+  if (err?.type === "entity.too.large") return res.status(413).json({ error: "request body too large" });
+  console.warn(`[gateway] request error: ${err?.message || err}`);
+  res.status(err?.status || err?.statusCode || 500).json({ error: "internal error" });
+});
 const server = app.listen(PORT, () => console.log(`[gateway] listening on :${PORT} → orchestrator ${ORCHESTRATOR_URL}, policy ${MCP_POLICY_URL}`));
-server.on("upgrade", wsProxy.upgrade);
+server.on("upgrade", (req, socket, head) => {
+  if (!req.url || !req.url.startsWith("/ws")) {
+    socket.destroy();
+    return;
+  }
+  try {
+    const token = new URL(req.url, "http://x").searchParams.get("token");
+    if (!token) throw new Error("missing token");
+    const payload = jwt.verify(token, CLIENT_SECRET);
+    req.headers["x-user-email"] = String(payload.email || "").toLowerCase().trim();
+  } catch {
+    socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+  wsProxy.upgrade(req, socket, head);
+});

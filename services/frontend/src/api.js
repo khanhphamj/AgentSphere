@@ -35,10 +35,16 @@ async function request(path, {
     body: body ? JSON.stringify(body) : undefined
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(json.error || `HTTP ${res.status}`), {
-    status: res.status,
-    data: json
-  });
+  if (!res.ok) {
+    if (res.status === 401 && auth && session.token) {
+      session.clear();
+      window.dispatchEvent(new Event("agentsphere:unauthorized"));
+    }
+    throw Object.assign(new Error(json.error || `HTTP ${res.status}`), {
+      status: res.status,
+      data: json
+    });
+  }
   return json;
 }
 export const api = {
@@ -57,10 +63,11 @@ export const api = {
     },
     auth: false
   }),
-  startMission: title => request("/api/missions", {
+  startMission: (title, depth) => request("/api/missions", {
     method: "POST",
     body: {
-      title
+      title,
+      depth: depth === "deep" ? "deep" : "quick"
     }
   }),
   getMission: id => request(`/api/missions/${id}`),
@@ -74,6 +81,13 @@ export const api = {
     method: "POST",
     body: {
       text
+    }
+  }),
+  approveMission: (id, approvalId, decision) => request(`/api/missions/${id}/approve`, {
+    method: "POST",
+    body: {
+      approvalId,
+      decision
     }
   }),
   listMissions: () => request("/api/missions"),
@@ -97,6 +111,13 @@ export const api = {
     method: "POST",
     body: {
       id: id || null
+    }
+  }),
+  calibration: () => request("/api/calibration/stats"),
+  setMissionOutcome: (id, value) => request(`/api/missions/${id}/outcome`, {
+    method: "POST",
+    body: {
+      value
     }
   }),
   getSquad: () => request("/api/squad"),
@@ -124,8 +145,8 @@ export function connectEvents({
     const proto = location.protocol === "https:" ? "wss" : "ws";
     const params = new URLSearchParams();
     if (missionId) params.set("missionId", missionId);
-    const email = session.user?.email;
-    if (email) params.set("u", email);
+    const token = session.token;
+    if (token) params.set("token", token);
     const qs = params.toString() ? `?${params.toString()}` : "";
     ws = new WebSocket(`${proto}://${location.host}/ws${qs}`);
     ws.onopen = () => {

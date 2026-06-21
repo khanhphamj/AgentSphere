@@ -91,7 +91,7 @@ const ASMap = (() => {
   carveBuilding(BUILDINGS.lab, 46, 15, GLASS);
   carveBuilding(BUILDINGS.library, 11, 35, WALL);
   carveBuilding(BUILDINGS.cafe, 30, 33, GLASS);
-  rect(25, 11, 28, 16, CARPET);
+  rect(22, 11, 28, 16, CARPET);
   rect(4, 21, 59, 23, PLAZA);
   rect(31, 21, 32, 22, WATER);
   rect(39, 27, 44, 32, DECK);

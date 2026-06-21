@@ -6,7 +6,7 @@ const ASWorld = (() => {
   const T = M.T;
   const ZONES = [
     { t: "HQ · OPEN OFFICE", x: 17, y: 5.4 },
-    { t: "MEETING ROOM", x: 26.5, y: 10.4 },
+    { t: "MEETING ROOM", x: 25, y: 10.4 },
     { t: "GREENNODE GYM", x: 46, y: 5.4 },
     { t: "FOOD HALL", x: 31, y: 25.4 },
     { t: "LIBRARY", x: 11.5, y: 26.4 },
@@ -241,19 +241,32 @@ const ASWorld = (() => {
     if (a.state === "social" && !a.moving) {
       const tnow = performance.now() / 1000;
       if (a.relaxKind === "court") {
-        if (a.shootUntil && tnow < a.shootUntil + 0.4) {
-          fx(ctx, x - 6, y - 12 + oy, 2, 6, p.skin);
-          fx(ctx, x + 4, y - 12 + oy, 2, 6, p.skin);
-        } else {
+        if (a.shootUntil && tnow < a.shootUntil) {
+          fx(ctx, x - 6, y - 13 + oy, 2, 7, p.skin);
+          fx(ctx, x + 4, y - 13 + oy, 2, 7, p.skin);
+          fx(ctx, x - 2, y - 18 + oy, 4, 4, "#E8853C");
+          fx(ctx, x - 2, y - 16 + oy, 4, 1, "#B95F22");
+        } else if (a.recvUntil && tnow < a.recvUntil) {
+          fx(ctx, x - 7, y - 10 + oy, 2, 5, p.skin);
+          fx(ctx, x + 5, y - 10 + oy, 2, 5, p.skin);
+        } else if (a.hasBall) {
           const bb = frame % 2 ? 5 : 0;
           fx(ctx, x + 6, y - 6 + oy, 2, 4, p.skin);
           fx(ctx, x + 5, y - 1 + bb, 4, 4, "#E8853C");
           fx(ctx, x + 5, y + 1 + bb, 4, 1, "#B95F22");
         }
       } else if (a.relaxKind === "field") {
-        const kb = frame % 2 ? 2 : 0;
-        fx(ctx, x + 4 + kb, y + 3, 4, 4, "#F4F1E6");
-        fx(ctx, x + 5 + kb, y + 4, 2, 2, "#3A3531");
+        if (a.kickUntil && tnow < a.kickUntil) {
+          fx(ctx, x + 4, y + 4 + oy, 6, 3, "#4A4440");
+          fx(ctx, x + 10, y + 2, 4, 4, "#F4F1E6");
+          fx(ctx, x + 11, y + 3, 2, 2, "#3A3531");
+        } else if (a.hasBall) {
+          const kb = frame % 2 ? 1 : 0;
+          fx(ctx, x + 4 + kb, y + 3, 4, 4, "#F4F1E6");
+          fx(ctx, x + 5 + kb, y + 4, 2, 2, "#3A3531");
+        } else if (a.recvUntil && tnow < a.recvUntil) {
+          fx(ctx, x - 7, y - 9 + oy, 2, 5, p.skin);
+        }
       }
     }
   }
@@ -316,14 +329,23 @@ const ASWorld = (() => {
     fx(x + 2, y - 11 + bob, 2, 3, p.hair);
     fx(x - 2, y - 9 + bob, 1, 2, "#2A2622");
     fx(x + 1, y - 9 + bob, 1, 2, "#2A2622");
-    if (frame % 2) {
-      fx(x - 8, y - 7, 3, 3, p.skin);
-      fx(x - 11, y - 8, 3, 2, "#EAF8FD");
+    const ph = (frame >> 1) % 4;
+    if (ph === 0) {
+      fx(x - 9, y - 9, 3, 3, p.skin);
+      fx(x - 12, y - 10, 3, 2, "#EAF8FD");
+    } else if (ph === 1) {
+      fx(x - 7, y - 6, 3, 3, p.skin);
+    } else if (ph === 2) {
+      fx(x + 6, y - 9, 3, 3, p.skin);
+      fx(x + 9, y - 10, 3, 2, "#EAF8FD");
     } else {
-      fx(x + 5, y - 7, 3, 3, p.skin);
-      fx(x + 8, y - 8, 3, 2, "#EAF8FD");
+      fx(x + 4, y - 6, 3, 3, p.skin);
     }
     fx(x - 6, y - 2 + bob, 12, 3, "rgba(143,220,242,0.65)");
+    const kf = frame % 2;
+    fx(x - 2 + (kf ? 3 : 0), y + 2, 2, 1, "#EAF8FD");
+    fx(x - 5, y + 1, 2, 1, "rgba(255,255,255,0.55)");
+    fx(x + 3, y + 2, 1, 1, "rgba(255,255,255,0.45)");
     fx(x - 9 + (frame * 3 & 7), y + 2, 1, 1, "#EAF8FD");
     fx(x + 8 - (frame * 2 & 7), y - 1, 1, 1, "#CFF0FA");
   }
@@ -461,7 +483,6 @@ const ASWorld = (() => {
     _green: { key: "greennode", amp: 0.9, breath: 0.028, hopH: 8, wob: 0.07, idleMood: "curious", faves: ["question", "idea", "think", "cool"], scanGap: [8, 13], engageP: 0.55, followP: 0.16, idleFlourish: 0.35 },
     _capy: { key: "capy", amp: 0.8, breath: 0.03, hopH: 7, wob: 0.05, idleMood: "happy", faves: ["heart", "music", "cool", "star"], scanGap: [9, 15], engageP: 0.5, followP: 0.14, idleFlourish: 0.25 }
   };
-  const SOCIAL_CENTER = { x: 26, y: 13 };
   const SP = { _mascot: 0.72, _navi: 0.82, _toro: 0.8, _green: 0.74, _capy: 0.66 };
   const NP = { _mascot: 0.1, _navi: 0.06, _toro: 0.08, _green: 0.1, _capy: 0.12 };
   const SIP = { _mascot: 0.22, _navi: 0.18, _toro: 0.2, _green: 0.22, _capy: 0.26 };
@@ -1286,6 +1307,7 @@ const ASWorld = (() => {
       a.emote = null;
       a.relaxKind = null;
       a.exercise = null;
+      a.hasBall = false;
       if (p) {
         a.path = p;
         a.moving = p.length > 0;
@@ -1368,34 +1390,8 @@ const ASWorld = (() => {
           a.stateUntil = t + 3 + Math.random() * 3;
           return;
         }
-        if (a.relaxKind === "court" && r < 0.6) {
-          const hoopX = Math.abs(a.tx - 47) < Math.abs(a.tx - 56) ? 47 : 56;
-          world.fx.push({
-            kind: "bball",
-            x0: a.px,
-            y0: a.py - 10,
-            x1: hoopX * T + 8,
-            y1: 29 * T + 4,
-            t0: now(),
-            dur: 0.8
-          });
-          a.shootUntil = now() + 0.8;
-          a.stateUntil = t + 2.5 + Math.random() * 4;
-          return;
-        }
-        if (a.relaxKind === "field" && r < 0.6) {
-          const spots = D.PLACES.field.spots;
-          const sp = spots[Math.random() * spots.length | 0];
-          world.fx.push({
-            kind: "fball",
-            x0: a.px,
-            y0: a.py + 4,
-            x1: sp.x * T + 8,
-            y1: sp.y * T + 8,
-            t0: now(),
-            dur: 0.7
-          });
-          a.stateUntil = t + 2.5 + Math.random() * 4;
+        if ((a.relaxKind === "court" || a.relaxKind === "field") && r < 0.75) {
+          a.stateUntil = t + 2 + Math.random() * 3;
           return;
         }
         if (r < 0.5 && !a.emote) say(a, D.AMBIENT_CHAT[Math.random() * D.AMBIENT_CHAT.length | 0]);
@@ -1410,6 +1406,69 @@ const ASWorld = (() => {
             kind: "resume"
           });
         } else a.stateUntil = t + 6 + Math.random() * 6;
+      }
+    }
+    const SPORT_VENUES = ["field", "court"];
+    world._sport = world._sport || { field: null, court: null };
+    const venuePlayers = venue => agents.filter(a => a.relaxKind === venue && !a.moving && (a.state === "social" || a.state === "idle") && M.g(a.tx, a.ty) !== M.POOL);
+    function sportTick(t) {
+      if (!world.fx) world.fx = [];
+      for (const venue of SPORT_VENUES) {
+        const isField = venue === "field";
+        const players = venuePlayers(venue);
+        if (players.length < 2) {
+          players.forEach(p => { p.hasBall = false; });
+          world._sport[venue] = null;
+          continue;
+        }
+        let g = world._sport[venue];
+        const holderOk = g && byId[g.holderId] && byId[g.holderId].relaxKind === venue && !byId[g.holderId].moving && M.g(byId[g.holderId].tx, byId[g.holderId].ty) !== M.POOL;
+        if (!holderOk) {
+          const h = players[Math.random() * players.length | 0];
+          g = world._sport[venue] = { holderId: h.id, nextAt: t + 0.6 + Math.random(), inFlight: false, handoffAt: 0, pendingId: null };
+        }
+        if (g.handoffAt && t >= g.handoffAt) {
+          if (g.pendingId && byId[g.pendingId] && byId[g.pendingId].relaxKind === venue) g.holderId = g.pendingId;
+          g.handoffAt = 0;
+          g.pendingId = null;
+          g.inFlight = false;
+          g.nextAt = t + 0.9 + Math.random() * 1.1;
+        }
+        players.forEach(p => { p.hasBall = p.id === g.holderId && !g.inFlight; });
+        if (g.inFlight || t < g.nextAt) continue;
+        const holder = byId[g.holderId];
+        const others = players.filter(p => p.id !== holder.id);
+        if (!others.length) { g.nextAt = t + 1; continue; }
+        if (Math.random() < 0.45) {
+          const runner = others[Math.random() * others.length | 0];
+          const spots = D.PLACES[venue].spots || [];
+          const sp = spots[Math.random() * spots.length | 0];
+          if (sp && Math.abs(runner.tx - sp.x) + Math.abs(runner.ty - sp.y) > 1) {
+            runner.pendingRelax = venue;
+            sendTo(runner, sp, "social");
+          }
+        }
+        if (Math.random() < 0.32) {
+          const hoopX = isField ? 57 : Math.abs(holder.tx - 47) < Math.abs(holder.tx - 56) ? 47 : 56;
+          const goal = { x: hoopX * T + 8, y: (isField ? 38 : 29) * T + (isField ? 8 : 4) };
+          const dur = isField ? 0.55 : 0.8;
+          if (isField) holder.kickUntil = now() + 0.45;else holder.shootUntil = now() + 0.7;
+          world.fx.push({ kind: isField ? "fball" : "bball", x0: holder.px, y0: holder.py - (isField ? -3 : 10), x1: goal.x, y1: goal.y, t0: now(), dur });
+          world.fx.push({ kind: "flash", x0: goal.x, y0: goal.y, x1: goal.x, y1: goal.y, t0: now() + dur, dur: 0.6, hw: 13 });
+          if (Math.random() < 0.6) say(holder, isField ? "Shoot!" : "Up top!", 1.5);
+          g.inFlight = true;
+          g.handoffAt = t + dur + 0.5;
+          g.pendingId = others[Math.random() * others.length | 0].id;
+        } else {
+          const recv = others[Math.random() * others.length | 0];
+          const dur = isField ? 0.5 : 0.42;
+          if (isField) holder.kickUntil = now() + 0.35;else holder.passUntil = now() + 0.3;
+          world.fx.push({ kind: isField ? "fball" : "bball", x0: holder.px, y0: holder.py - (isField ? -3 : 8), x1: recv.px, y1: recv.py - (isField ? -3 : 8), t0: now(), dur });
+          recv.recvUntil = now() + dur + 0.35;
+          g.inFlight = true;
+          g.handoffAt = t + dur;
+          g.pendingId = recv.id;
+        }
       }
     }
     let huddle = null;
@@ -1770,16 +1829,6 @@ const ASWorld = (() => {
       c.social = dur;
       c._mode = mode;
     }
-    function enterSpectate(c, t) {
-      const spot = adjWalkable(c, SOCIAL_CENTER.x, SOCIAL_CENTER.y) || nearestWalkable(SOCIAL_CENTER.x + 2, SOCIAL_CENTER.y + 2);
-      const p = findPath(c.tx, c.ty, spot[0], spot[1], inWater);
-      if (!p) return;
-      c.path = p;
-      c.state = "walk";
-      c.aiState = "spectate";
-      c.target = null;
-      c.social = 0;
-    }
     function endSocial(c, t, extra = 0) {
       c.aiState = "";
       c.target = null;
@@ -1817,20 +1866,6 @@ const ASWorld = (() => {
       return true;
     }
     function runOverlay(c, key, cfg, dt, t, missionActive, meetingNow) {
-      if (c.aiState === "spectate") {
-        if (c.path.length) {
-          moveAlong(c, dt, t, SP[key]);
-          return;
-        }
-        if (!meetingNow) {
-          endSocial(c, t);
-          return;
-        }
-        critFaceTo(c, SOCIAL_CENTER.x * T + 8, SOCIAL_CENTER.y * T + 8);
-        if (Math.random() < 0.01) critFeel(c, null, pick(cfg.faves), 2.2);
-        if (Math.random() < 0.012) critAnim(c, "hop", 0.45, cfg.amp);
-        return;
-      }
       if (c.aiState === "approach") {
         if (c.path.length) {
           moveAlong(c, dt, t, SP[key]);
@@ -1963,7 +1998,6 @@ const ASWorld = (() => {
         runAct(c, key, dt, t);
         return;
       }
-      if (meetingNow && c.aiState !== "spectate" && !c.path.length && t > c.cd) enterSpectate(c, t);
       if (c.aiState) {
         runOverlay(c, key, cfg, dt, t, missionActive, meetingNow);
         return;
@@ -2025,11 +2059,6 @@ const ASWorld = (() => {
         const au = world._aurora;
         au.conf += (au.confTo - au.conf) * Math.min(1, dt * 1.3);
         au.lit = Math.max(0, au.lit - dt * 0.05);
-      }
-      if (world._tug && world._tug.active) {
-        const tg = world._tug;
-        tg.pos += (tg.target - tg.pos) * Math.min(1, dt * (tg.snap ? 6 : 2.2));
-        tg.jolt = Math.max(0, tg.jolt - dt * 2.4);
       }
       if (!world._sparkles) world._sparkles = [];
       if (world._sparkles.length < 26 && Math.random() < 0.5) world._sparkles.push({
@@ -2129,6 +2158,7 @@ const ASWorld = (() => {
           }
         }
       });
+      sportTick(t);
     }
     function render() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -2446,40 +2476,6 @@ const ASWorld = (() => {
         if (a.bubble) drawBubble(ctx, a, sx, sy, z);else if (a.emote) drawEmote(ctx, a, sx, sy, z, world._frame);
         if (a.state === "down") drawAlert(ctx, sx, sy, z, world._frame);
       });
-      if (world._tug && world._tug.active) {
-        const tg = world._tug;
-        const [cxS, cyS] = toScreen(26 * T + 8, 12 * T + 2);
-        const R = 46 * z;
-        const jx = tg.jolt > 0.02 ? Math.sin(world._frame * 1.7) * tg.jolt * 7 * z : 0;
-        ctx.save();
-        ctx.strokeStyle = "rgba(70,58,44,0.55)";
-        ctx.lineWidth = Math.max(2, 2 * z);
-        ctx.beginPath();
-        ctx.moveTo(cxS - R, cyS);
-        ctx.lineTo(cxS + R, cyS);
-        ctx.stroke();
-        ctx.fillStyle = "#E8A53C";
-        ctx.fillRect(cxS - R - 4 * z, cyS - 6 * z, 4 * z, 12 * z);
-        ctx.fillStyle = "#1ED760";
-        ctx.fillRect(cxS + R, cyS - 6 * z, 4 * z, 12 * z);
-        const tokenX = cxS + tg.pos * R + jx;
-        const warm = tg.pos < -0.05,
-          cool = tg.pos > 0.05;
-        const tc = warm ? "#E8A53C" : cool ? "#1ED760" : "#E5C46B";
-        ctx.fillStyle = warm ? "rgba(232,165,60,0.34)" : cool ? "rgba(30,215,96,0.34)" : "rgba(229,196,107,0.3)";
-        ctx.beginPath();
-        ctx.arc(tokenX, cyS, (8 + tg.jolt * 5) * z, 0, 6.283);
-        ctx.fill();
-        ctx.fillStyle = tc;
-        ctx.beginPath();
-        ctx.arc(tokenX, cyS, 4.5 * z, 0, 6.283);
-        ctx.fill();
-        ctx.fillStyle = "rgba(255,255,255,0.9)";
-        ctx.beginPath();
-        ctx.arc(tokenX - 1.4 * z, cyS - 1.4 * z, 1.5 * z, 0, 6.283);
-        ctx.fill();
-        ctx.restore();
-      }
       {
         const lz = z <= 3 ? 1 : z >= 4.5 ? 0 : (4.5 - z) / 1.5;
         if (lz > 0.03) {
@@ -2658,6 +2654,12 @@ const ASWorld = (() => {
         until: now() + (cmd.emoteDur || 3)
       };
     };
+    world.walkTo = (id, targetId) => {
+      const a = byId[id],
+        t = byId[targetId];
+      if (!a || !t) return;
+      sendTo(a, { x: t.tx, y: t.ty }, "social");
+    };
     world.crash = crash;
     world.revive = revive;
     world.focusAgent = id => {
@@ -2727,7 +2729,7 @@ const ASWorld = (() => {
     });
     world.mascotReact = (kind, opts = {}) => {
       const t = now();
-      const dur = opts.dur || ({ perk: 5, question: 5, worryFlag: 5, relieved: 5, reportHi: 6, reportLo: 5, completed: 8, failed: 7, progress: 3.5, spectate: 30 }[kind] || 4.5);
+      const dur = opts.dur || ({ perk: 5, question: 5, worryFlag: 5, relieved: 5, reportHi: 6, reportLo: 5, completed: 8, failed: 7, progress: 3.5 }[kind] || 4.5);
       const ring = [[-1, 0], [1, 0], [-1, 1], [1, 1]];
       switch (kind) {
         case "perk":
@@ -2771,18 +2773,6 @@ const ASWorld = (() => {
             c.actUntil = t + dur;
             critAnim(c, "shake", 0.4, cfg.amp * 0.6);
             critFeel(c, "scared", "exclaim", dur * 0.8);
-          });
-          break;
-        case "spectate":
-          eachMascot((c, cfg, k) => {
-            c.act = "spectate";
-            const sd = Math.min(40, dur);
-            c.actUntil = t + sd;
-            const o = ring[MASCOT_KEYS.indexOf(k)];
-            mascotSendTile(c, SOCIAL_CENTER.x + o[0] * 2, SOCIAL_CENTER.y + o[1]);
-            c.hold = t + sd;
-            c.faceX = SOCIAL_CENTER.x * T + 8;
-            critFeel(c, "curious", cfg.faves[0], 4);
           });
           break;
         case "relieved":

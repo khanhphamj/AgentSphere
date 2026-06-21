@@ -77,7 +77,7 @@ export function budgetFor(models, task) {
     temperature: pool.reasoning || task === "meeting" ? 0.6 : 0.7,
     toolRounds: pool.context <= 16384 ? 2 : 4,
     toolCallsPerRound: 5,
-    toolResultChars: Math.max(800, Math.min(6000, Math.floor(input * CHARS_PER_TOKEN / (2 * 5 + 3))))
+    toolResultChars: Math.max(800, Math.min(14000, Math.floor(input * CHARS_PER_TOKEN / (2 * 5 + 3))))
   };
 }
 

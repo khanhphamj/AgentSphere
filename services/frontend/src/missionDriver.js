@@ -1,5 +1,6 @@
 import AS from "./data.js";
 const nameOf = id => (AS.AGENTS.find(a => a.id === id) || {}).name || id;
+const stanceLabel = s => ({ support: "support", oppose: "oppose", conditional: "conditional", insufficient: "insufficient" })[s] || s || "done";
 export function createMissionDriver({
   world,
   log,
@@ -17,6 +18,19 @@ export function createMissionDriver({
       goto: world.deskOf(a.id),
       state: "working"
     }));
+  };
+  const glideTo = place => {
+    if (!place || !world.glide) return;
+    const spots = place.spots || [];
+    let cx, cy;
+    if (spots.length) {
+      cx = spots.reduce((s, q) => s + q.x, 0) / spots.length;
+      cy = spots.reduce((s, q) => s + q.y, 0) / spots.length;
+    } else if (place.door) {
+      cx = place.door.x;
+      cy = place.door.y;
+    } else return;
+    world.glide(cx * 16, cy * 16);
   };
   const say = (agentId, text, dur = 5.5, tone = null) => {
     if (agentId && text) world.command(agentId, {
@@ -54,17 +68,6 @@ export function createMissionDriver({
     if (confTo != null) world._aurora.confTo = Math.max(0, Math.min(1, confTo));
     if (lit != null) world._aurora.lit = Math.max(world._aurora.lit, lit);
   };
-  let supVotes = 0,
-    oppVotes = 0;
-  const setTug = patch => {
-    world._tug = Object.assign(world._tug || {
-      pos: 0,
-      target: 0,
-      jolt: 0,
-      active: false,
-      snap: false
-    }, patch);
-  };
   return function handleEvent(ev) {
     const {
       type,
@@ -86,13 +89,15 @@ export function createMissionDriver({
             done: false,
             stage: 0,
             hadDebate: false,
+            startedAt: Date.now(),
+            phaseIndex: null,
             subtasks: [],
             meeting: null,
             report: null
           });
           weather("clear");
           mascot("perk", { x: 18 });
-          log("atlas", `${nameOf("atlas")} received the mission: “${p.title}”`);
+          log("atlas", `${nameOf("atlas")} took on the mission: “${p.title}”`);
           break;
         }
       case "phase.gather":
@@ -111,6 +116,7 @@ export function createMissionDriver({
           setMission(m => m && {
             ...m,
             phase: "executing",
+            phaseIndex: 0,
             stage: Math.max(m.stage || 0, 1),
             subtasks: p.subtasks.map(s => ({
               ...s
@@ -124,7 +130,30 @@ export function createMissionDriver({
             });
           });
           const why = p.assessment && p.assessment.handler === "model" ? ` (${p.assessment.complexity === "simple" ? "light mission" : "full squad"}${p.assessment.reason ? ` — ${p.assessment.reason}` : ""})` : "";
-          log("atlas", `${nameOf("atlas")} decomposed the mission into ${p.subtasks.length} subtasks and assigned them${why}`);
+          log("atlas", `${nameOf("atlas")} planned phase 1 — ${p.subtasks.length} subtasks running in parallel${why}`);
+          break;
+        }
+      case "phase.started":
+        {
+          setMission(m => m && {
+            ...m,
+            phase: "executing",
+            phaseIndex: p.index,
+            stage: Math.max(m.stage || 0, 1),
+            subtasks: [...(m.subtasks || []), ...p.subtasks.map(s => ({ ...s }))]
+          });
+          const assigned = new Set(p.subtasks.map(s => s.agentId));
+          AS.AGENTS.forEach(a => {
+            if (assigned.has(a.id)) world.command(a.id, { scripted: true });
+          });
+          log("atlas", `${nameOf("atlas")} opened phase ${p.index + 1}: ${p.goal || ""} — ${p.subtasks.length} new subtasks`);
+          break;
+        }
+      case "agent.share":
+        {
+          say(p.agentId, p.say || "Comparing notes…", 4.5, "talk");
+          feel(p.agentId, "talk", null, 4);
+          log(p.agentId, `${nameOf(p.agentId)} compared notes with ${(p.peers || []).map(nameOf).join(", ") || "the squad"}`);
           break;
         }
       case "agent.progress":
@@ -159,7 +188,7 @@ export function createMissionDriver({
           } else if (p.status === "done") {
             if (p.simulated) say(p.agentId, "⚠ model unreachable — answered from offline fallback", 6, "warn");
             else if (p.say) say(p.agentId, p.say);
-            log(p.agentId, `${nameOf(p.agentId)} concluded (${p.stance || "done"}${p.confidence ? ` · ${p.confidence}%` : ""}${p.simulated ? " · offline fallback" : ""})`);
+            log(p.agentId, `${nameOf(p.agentId)} concluded (${stanceLabel(p.stance)}${p.confidence ? ` · ${p.confidence}%` : ""}${p.simulated ? " · offline" : ""})`);
             if (!p.simulated) feel(p.agentId, p.stance === "oppose" ? "skeptical" : "happy", "idea");
             if (!p.simulated) mascot("progress");
             if (p.confidence != null && !p.simulated) {
@@ -169,13 +198,13 @@ export function createMissionDriver({
             setAurora(confN ? confSum / confN / 100 : null, 1);
           } else if (p.status === "failed") {
             world.crash(p.agentId, p.error || "model unreachable");
-            log(p.agentId, `✗ ${nameOf(p.agentId)} went down — ${p.error || "model unreachable"}`);
+            log(p.agentId, `✗ ${nameOf(p.agentId)} hit an error — ${p.error || "model not responding"}`);
           }
           break;
         }
       case "agent.tool":
         {
-          const mark = p.allowed ? "✓" : "✗ denied by policy";
+          const mark = p.allowed ? "✓" : "✗ denied";
           log(p.agentId, `${nameOf(p.agentId)} → ${p.server}/${p.tool} ${mark}`);
           if (p.allowed) {
             const tn = world._last || 0;
@@ -214,7 +243,7 @@ export function createMissionDriver({
           break;
         }
       case "mission.clarified":
-        log("atlas", `You answered: “${p.answer}” — the squad resumes`);
+        log("atlas", `You answered: “${p.answer}” — the squad continues`);
         break;
       case "agent.question":
         {
@@ -229,7 +258,7 @@ export function createMissionDriver({
           setTimeout(() => say(p.agentId, `❓ ${p.question}`, 5.5), 2200);
           feel(p.agentId, "worried", "worry", 7);
           mascot("question", { x: leadDesk.x });
-          log(p.agentId, `${nameOf(p.agentId)} walks over to ask the lead: “${p.question}”`);
+          log(p.agentId, `${nameOf(p.agentId)} walked over to ask the lead: “${p.question}”`);
           break;
         }
       case "agent.answer":
@@ -242,6 +271,84 @@ export function createMissionDriver({
           }), 3000);
           break;
         }
+      case "agent.message":
+        {
+          const toDesk = world.deskOf(p.to);
+          if (toDesk) world.command(p.agentId, {
+            goto: { x: toDesk.x, y: toDesk.y + 1 },
+            state: "moving"
+          });
+          setTimeout(() => say(p.agentId, `✉️ ${p.body}`, 5, "talk"), 1800);
+          feel(p.agentId, "talk", null, 4);
+          log(p.agentId, `${nameOf(p.agentId)} messaged ${nameOf(p.to)}: “${p.body}”`);
+          setTimeout(() => {
+            const home = world.deskOf(p.agentId);
+            if (home) world.command(p.agentId, { goto: home, state: "working" });
+          }, 5200);
+          break;
+        }
+      case "task.posted":
+        {
+          feel(p.agentId, "talk", "idea", 4);
+          mascot("perk", {});
+          log(p.agentId, `${nameOf(p.agentId)} posted a sub-task to the board: “${p.title}”`);
+          break;
+        }
+      case "agent.ask":
+        {
+          const toDesk = world.deskOf(p.to);
+          if (toDesk) world.command(p.agentId, {
+            goto: { x: toDesk.x, y: toDesk.y + 1 },
+            state: "moving"
+          });
+          setTimeout(() => say(p.agentId, `❓ ${p.question}`, 5, "talk"), 1600);
+          feel(p.agentId, "talk", "think", 5);
+          log(p.agentId, `${nameOf(p.agentId)} asked ${nameOf(p.to)}: “${p.question}”`);
+          setTimeout(() => {
+            const home = world.deskOf(p.agentId);
+            if (home) world.command(p.agentId, { goto: home, state: "working" });
+          }, 6000);
+          break;
+        }
+      case "agent.reply":
+        {
+          say(p.agentId, p.answer, 6, "talk");
+          log(p.agentId, `${nameOf(p.agentId)} answered ${nameOf(p.to)}: “${p.answer}”`);
+          setTimeout(() => {
+            const home = p.to && world.deskOf(p.to);
+            if (home) world.command(p.to, { goto: home, state: "working" });
+          }, 3000);
+          break;
+        }
+      case "task.claimed":
+        {
+          world.command(p.agentId, { goto: world.deskOf(p.agentId), state: "working", mood: "focused", emote: "think", emoteDur: 3 });
+          feel(p.agentId, "focused", "think", 4);
+          log(p.agentId, `${nameOf(p.agentId)} picked up a board task: “${p.title}”`);
+          break;
+        }
+      case "task.completed":
+        {
+          say(p.agentId, "✓ Done — posted to the board", 4, "happy");
+          feel(p.agentId, "happy", "spark", 4);
+          log(p.agentId, `${nameOf(p.agentId)} finished the board task: “${p.title}”`);
+          break;
+        }
+      case "approval.request":
+        {
+          setMission(m => m && { ...m, pendingApproval: { approvalId: p.approvalId, tool: p.tool, summary: p.summary, agentId: p.agentId } });
+          feel(p.agentId, "worried", "alert", 9);
+          say(p.agentId, `⏸ Need the director's OK to run ${p.tool}`, 8, "warn");
+          mascot("question", {});
+          log(p.agentId, `${nameOf(p.agentId)} is waiting for your approval to run ${p.tool}`);
+          break;
+        }
+      case "approval.resolved":
+        {
+          setMission(m => m && (m.pendingApproval && m.pendingApproval.approvalId === p.approvalId ? { ...m, pendingApproval: null } : m));
+          log(null, `Approval ${p.decision === "allow" ? "granted ✓" : "denied ✗"}${p.reason ? ` (${p.reason})` : ""}`);
+          break;
+        }
       case "event.started":
         {
           AS.AGENTS.forEach(a => world.command(a.id, {
@@ -252,11 +359,12 @@ export function createMissionDriver({
             phase: "event"
           });
           say(p.agentId, p.say, 7);
-          log(p.agentId, `${nameOf(p.agentId)} kicks off the event: ${p.say}`);
+          log(p.agentId, `${nameOf(p.agentId)} kicked off the event: ${p.say}`);
           break;
         }
       case "event.race":
         {
+          glideTo(AS.PLACES.pool);
           const lanes = [40, 41, 42, 43, 40];
           p.racers.forEach((id, i) => world.command(id, {
             goto: {
@@ -286,19 +394,20 @@ export function createMissionDriver({
               relax: "pool"
             }), 9500 + i * 1400);
           });
-          log(null, `🏊 Swim race: ${p.racers.map(nameOf).join(", ")} line up in the pool`);
+          log(null, `🏊 Swim race: ${p.racers.map(nameOf).join(", ")} line up at the start`);
           break;
         }
       case "event.result":
         {
           say(p.agentId, p.say, 7);
           setTimeout(() => say(p.winner, "🏆", 5), 800);
-          log(p.winner, `🏆 ${nameOf(p.winner)} wins the swim race!`);
+          log(p.winner, `🏆 ${nameOf(p.winner)} won the swim race!`);
           break;
         }
       case "event.party":
         {
           const place = AS.PLACES[p.place];
+          glideTo(place);
           const spots = place?.spots || [];
           AS.AGENTS.forEach((a, i) => {
             const spot = spots.length ? spots[i % spots.length] : place.door;
@@ -319,7 +428,8 @@ export function createMissionDriver({
         AS.AGENTS.forEach(a => world.command(a.id, {
           scripted: false
         }));
-        log(null, "Event wrapped — back to free time");
+        if (world.glide) world.glide(18 * 16, 12 * 16);
+        log(null, "Event ended — back to free time");
         break;
       case "agent.review":
         {
@@ -331,42 +441,69 @@ export function createMissionDriver({
               status: "review"
             } : s)
           });
-          say(p.agentId, `Để tôi xem lại kết quả của ${nameOf(p.target)}…`, 4.5);
-          log(p.agentId, `${nameOf(p.agentId)} is reviewing ${nameOf(p.target)}'s result`);
+          say(p.agentId, `Let me review ${nameOf(p.target)}'s results…`, 4.5);
+          log(p.agentId, `${nameOf(p.agentId)} is reviewing ${nameOf(p.target)}'s results`);
           break;
         }
       case "agent.redo":
         {
-          say(p.agentId, `${nameOf(p.target)}, làm lại nhé: ${p.feedback}`, 6);
-          setTimeout(() => say(p.target, "Rõ, tôi làm lại ngay.", 4), 1800);
+          say(p.agentId, `${nameOf(p.target)}, please redo this: ${p.feedback}`, 6);
+          setTimeout(() => say(p.target, "Got it, I'll redo it right away.", 4), 1800);
           log(p.agentId, `↻ ${nameOf(p.agentId)} sent it back to ${nameOf(p.target)}: “${p.feedback}”`);
           break;
         }
       case "agent.reviewed":
-        if (!p.redone) log(p.agentId, `✓ ${nameOf(p.agentId)} approved ${nameOf(p.target)}'s result`);else log(p.agentId, `✓ ${nameOf(p.agentId)} approved ${nameOf(p.target)}'s revised result`);
+        if (!p.redone) log(p.agentId, `✓ ${nameOf(p.agentId)} approved ${nameOf(p.target)}'s results`);else log(p.agentId, `✓ ${nameOf(p.agentId)} approved ${nameOf(p.target)}'s revised results`);
         break;
       case "agent.takeover":
         feel(p.from, "skeptical", "mindblown", 4);
         mascot("worryFlag");
-        log(p.agentId, `⤴ ${nameOf(p.from)} hit an error (${p.reason || "model failure"}) — ${nameOf(p.agentId)} is taking over the ${p.role || ""} task`);
+        log(p.agentId, `⤴ ${nameOf(p.from)} hit an error (${p.reason || "model error"}) — ${nameOf(p.agentId)} is taking over`);
         break;
       case "verify.started":
         bump(3);
-        log(p.agentId, `${nameOf(p.agentId)} is fact-checking the squad's numbers…`);
+        log(p.agentId, `${nameOf(p.agentId)} is fact-checking the squad's figures…`);
         break;
       case "verify.done":
         {
           const total = (p.flags || []).reduce((n, f) => n + f.count, 0);
-          log(p.agentId, total ? `⚑ ${nameOf(p.agentId)} flagged ${total} claim${total > 1 ? "s" : ""} (${p.flags.map(f => f.role).join(", ")}) — confidence adjusted` : `${nameOf(p.agentId)} verified the squad's numbers — no issues found`);
+          log(p.agentId, total ? `⚑ ${nameOf(p.agentId)} flagged ${total} claims (${p.flags.map(f => nameOf(f.agentId)).join(", ")}) — adjusted confidence` : `${nameOf(p.agentId)} fact-checked the figures — no issues`);
           if (total && world._aurora) setAurora(world._aurora.confTo - Math.min(0.3, total * 0.1), 1);else setAurora(null, 1);
           if (total) {
             (p.flags || []).forEach(f => {
-              const ag = AS.AGENTS.find(a => a.agentRole === f.role);
-              if (ag) feel(ag.id, "skeptical", "mindblown", 4);
+              if (f.agentId) feel(f.agentId, "skeptical", "mindblown", 4);
             });
             feel(p.agentId, "happy", "cool", 4);
             mascot("worryFlag");
           }
+          break;
+        }
+      case "synthesize.started":
+        {
+          bump(2);
+          feel(p.agentId, "focused", "think", 4);
+          log(p.agentId, `${nameOf(p.agentId)} is checking & synthesizing the phase…${p.iteration ? ` (phase ${p.iteration + 1})` : ""}`);
+          break;
+        }
+      case "phase.synthesized":
+        {
+          if (p.sufficient) {
+            log(p.agentId, `✓ ${nameOf(p.agentId)} synthesized phase ${p.index + 1} — enough to conclude`);
+            feel(p.agentId, "happy", "cool", 4);
+          } else {
+            log(p.agentId, `⚠ ${nameOf(p.agentId)} synthesized phase ${p.index + 1} — opening another phase: ${p.nextGoal || ""}`);
+            feel(p.agentId, "skeptical", "think", 4);
+          }
+          setMission(m => m && {
+            ...m,
+            phases: [...(m.phases || []).filter(e => e.index !== p.index), {
+              index: p.index,
+              summary: p.summary,
+              sufficient: p.sufficient,
+              concerns: p.concerns || [],
+              nextGoal: p.nextGoal || null
+            }].sort((a, b) => a.index - b.index)
+          });
           break;
         }
       case "conflict.detected":
@@ -384,32 +521,29 @@ export function createMissionDriver({
             }
           });
           weather("storm");
-          supVotes = 0;
-          oppVotes = 0;
-          setTug({ pos: 0, target: 0, jolt: 0.5, active: true, snap: false });
-          mascot("spectate");
-          log(null, `Conflicting stances detected (${p.summary.oppose.join(", ")} vs ${p.summary.support.join(", ")}) — convening the squad`);
+          log(null, `Conflicting views detected (${p.summary.oppose.join(", ")} vs ${p.summary.support.join(", ")}) — summoning the squad`);
           break;
         }
       case "conflict.none":
-        log(null, "No conflict — the squad aligned without a meeting");
+        log(null, "No conflict — the squad agrees, no meeting needed");
         break;
       case "meeting.started":
         gather();
-        mascot("spectate");
-        if (world.glide) world.glide(26 * 16, 13.5 * 16);
+        if (world.glide) world.glide(25 * 16, 13.5 * 16);
         setTimeout(() => world.faceCenter && world.faceCenter(AS.AGENTS.map(a => a.id)), 3500);
-        log(null, "Consensus meeting starts in the meeting room");
+        log(null, "The consensus meeting begins in the meeting room");
         break;
       case "meeting.turn":
         {
           say(p.agentId, p.say, 5);
           feel(p.agentId, p.stance === "oppose" ? "skeptical" : p.stance === "support" ? "happy" : "talk", null, 5);
           if (world.faceCenter) world.faceCenter(AS.AGENTS.map(a => a.id));
-          if (p.stance === "support") supVotes++;else if (p.stance === "oppose") oppVotes++;
-          {
-            const tot = supVotes + oppVotes;
-            setTug({ active: true, target: tot ? (supVotes - oppVotes) / tot : 0, jolt: 0.55 });
+          if (p.conceded) {
+            const toName = nameOf(p.towardAgentId);
+            if (p.towardAgentId && world.walkTo) world.walkTo(p.agentId, p.towardAgentId);
+            setTimeout(() => feel(p.agentId, "happy", "cool", 4), 900);
+            if (world.cheerWave) setTimeout(() => world.cheerWave(AS.AGENTS.map(a => a.id), 2), 1400);
+            log(p.agentId, `🤝 ${nameOf(p.agentId)} conceded${toName ? ` to ${toName}` : ""} — switched stance to ${stanceLabel(p.stance)}`);
           }
           setMission(m => {
             if (!m) return m;
@@ -428,7 +562,9 @@ export function createMissionDriver({
                   say: p.say,
                   argument: p.argument,
                   stance: p.stance,
-                  round: p.round
+                  round: p.round,
+                  conceded: p.conceded || false,
+                  towardAgentId: p.towardAgentId || null
                 }]
               }
             };
@@ -437,10 +573,24 @@ export function createMissionDriver({
         }
       case "steer.applied":
         {
-          log("atlas", `⚖ Giám đốc chen vào cuộc họp: “${p.text}”`);
+          log("atlas", `⚖ The director stepped into the meeting: “${p.text}”`);
           AS.AGENTS.forEach(a => feel(a.id, "talk", "think", 4));
           if (world.faceCenter) world.faceCenter(AS.AGENTS.map(a => a.id));
-          setTug({ active: true, jolt: 1 });
+          setMission(m => {
+            if (!m || !m.meeting) return m;
+            const round = m.meeting.turns.reduce((r, t) => t.round != null ? Math.max(r, t.round) : r, 1);
+            return {
+              ...m,
+              meeting: {
+                ...m.meeting,
+                turns: [...m.meeting.turns, {
+                  director: true,
+                  text: p.text,
+                  round
+                }]
+              }
+            };
+          });
           break;
         }
       case "meeting.resolved":
@@ -455,19 +605,35 @@ export function createMissionDriver({
               }),
               decision: p.decision,
               rationale: p.rationale,
-              conditions: p.conditions || []
+              conditions: p.conditions || [],
+              fragility: p.fragility || null
             }
           });
           weather(decisionWeather(p.decision));
           {
             const fin = /do-not-proceed/.test(p.decision) ? -1 : /proceed/.test(p.decision) ? 1 : 0;
-            setTug({ active: true, target: fin, snap: true, jolt: 1 });
             const tcx = (26 * 16 + 8) + fin * 44;
             if (world.celebrate) setTimeout(() => world.celebrate(tcx, 13 * 16 + 8), 200);
-            setTimeout(() => setTug({ active: false, snap: false }), 4200);
           }
           mascot("relieved");
           log("atlas", `Consensus reached: ${p.decision}`);
+          break;
+        }
+      case "scenarios.started":
+        {
+          feel(p.agentId, "focused", "think", 4);
+          log(p.agentId, `${nameOf(p.agentId)} is simulating best / most-likely / worst scenarios…`);
+          break;
+        }
+      case "scenarios.done":
+        {
+          log(p.agentId, `${nameOf(p.agentId)} simulated ${(p.scenarios || []).length} scenarios`);
+          mascot("progress");
+          setMission(m => m && {
+            ...m,
+            scenarios: p.scenarios && p.scenarios.length ? p.scenarios : m.scenarios,
+            sensitivity: p.sensitivity || m.sensitivity
+          });
           break;
         }
       case "report.started":
@@ -486,10 +652,14 @@ export function createMissionDriver({
         {
           setMission(m => m && {
             ...m,
+            evaluations: p.evaluations && p.evaluations.length ? p.evaluations : m.evaluations,
+            scenarios: p.scenarios && p.scenarios.length ? p.scenarios : m.scenarios,
+            sensitivity: p.sensitivity || m.sensitivity,
             report: {
               markdown: p.markdown,
               recommendation: p.recommendation,
               confidence: p.confidence,
+              confidenceRationale: p.confidenceRationale || null,
               breakdown: p.breakdown || null
             }
           });
@@ -505,7 +675,7 @@ export function createMissionDriver({
               if (world.cheerWave) world.cheerWave(AS.AGENTS.map(a => a.id), 2);
             } else if (p.confidence >= 80) mascot("reportHi", { desk });else mascot("reportLo");
           }
-          log(p.agentId, "Final report is ready — open the mission panel to read it");
+          log(p.agentId, "The final report is ready — open the mission panel to read it");
           break;
         }
       case "mission.completed":
@@ -513,7 +683,8 @@ export function createMissionDriver({
           setMission(m => m && {
             ...m,
             done: true,
-            phase: "done"
+            phase: "done",
+            fragility: p.fragility || m.fragility || null
           });
           weather(decisionWeather(p.decision));
           log("atlas", `Mission complete: “${p.title}” ✓`);

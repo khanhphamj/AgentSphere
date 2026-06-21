@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+export const accountStore = new AsyncLocalStorage();
 const BASE_URL = (process.env.LLM_BASE_URL || "").replace(/\/$/, "");
 const API_KEY = process.env.LLM_API_KEY || "";
 const SIM_MODE = (process.env.LLM_SIMULATION || "auto").toLowerCase();
@@ -12,21 +14,23 @@ const jsonModeCapable = model => /^openai\//.test(model) && !usesResponsesApi(mo
 const BREAKER_FAILS = 2,
   BREAKER_OPEN_MS = 60_000;
 const breaker = new Map();
-const breakerOpen = model => {
-  const b = breaker.get(model);
+const bkey = (account, model) => `${account || "_global"}|${model}`;
+const breakerOpen = (account, model) => {
+  const b = breaker.get(bkey(account, model));
   return !!(b && b.openUntil > Date.now());
 };
-const breakerFail = model => {
-  const b = breaker.get(model) || { fails: 0, openUntil: 0 };
+const breakerFail = (account, model) => {
+  const k = bkey(account, model);
+  const b = breaker.get(k) || { fails: 0, openUntil: 0 };
   b.fails += 1;
   if (b.fails >= BREAKER_FAILS) {
     b.openUntil = Date.now() + BREAKER_OPEN_MS;
     b.fails = 0;
-    console.warn(`[agent-runtime] circuit breaker OPEN for ${model} — skipping for ${BREAKER_OPEN_MS / 1000}s`);
+    console.warn(`[agent-runtime] circuit breaker OPEN for ${model} (account ${account || "_global"}) — skipping for ${BREAKER_OPEN_MS / 1000}s`);
   }
-  breaker.set(model, b);
+  breaker.set(k, b);
 };
-const breakerOk = model => breaker.delete(model);
+const breakerOk = (account, model) => breaker.delete(bkey(account, model));
 async function fetchWithRetry(url, options, label) {
   const backoffs = [2000, 5000, 11000];
   for (let attempt = 0; ; attempt++) {
@@ -58,7 +62,6 @@ async function callResponsesApi({
   model,
   messages,
   tools,
-  toolChoice,
   maxTokens = 1400
 }, attempt = 0) {
   const instructions = messages.filter(m => m.role === "system").map(m => m.content).join("\n\n");
@@ -82,7 +85,7 @@ async function callResponsesApi({
     ...(instructions ? { instructions } : {}),
     ...(tools && tools.length ? {
       tools: tools.map(t => ({ type: "function", name: t.function.name, description: t.function.description, parameters: t.function.parameters })),
-      tool_choice: toolChoice ? { type: "function", name: toolChoice } : "auto"
+      tool_choice: "auto"
     } : {})
   };
   const res = await fetchWithRetry(`${BASE_URL}/responses`, {
@@ -111,7 +114,7 @@ async function callResponsesApi({
   if (json.status === "incomplete" && empty) {
     if (attempt < 1) {
       console.warn(`[agent-runtime] model ${model} (responses) truncated — retrying with larger budget`);
-      return callResponsesApi({ model, messages, tools, toolChoice, maxTokens: Math.min(16384, maxTokens * 3) }, attempt + 1);
+      return callResponsesApi({ model, messages, tools, maxTokens: Math.min(16384, maxTokens * 3) }, attempt + 1);
     }
     throw new Error(`LLM ${model}: truncated with empty output after retry`);
   }
@@ -121,13 +124,12 @@ async function callApi({
   model,
   messages,
   tools,
-  toolChoice,
   temperature = 0.7,
   maxTokens = 1400,
   jsonMode = false
 }, attempt = 0) {
   if (SIM_MODE === "on" || !BASE_URL || !API_KEY) throw new SimulationRequested("simulation mode");
-  if (usesResponsesApi(model)) return callResponsesApi({ model, messages, tools, toolChoice, maxTokens });
+  if (usesResponsesApi(model)) return callResponsesApi({ model, messages, tools, maxTokens });
   const useJson = jsonMode && jsonModeCapable(model) && !(tools && tools.length);
   const body = {
     model,
@@ -137,12 +139,7 @@ async function callApi({
     ...(useJson ? { response_format: { type: "json_object" } } : {}),
     ...(tools && tools.length ? {
       tools,
-      tool_choice: toolChoice ? {
-        type: "function",
-        function: {
-          name: toolChoice
-        }
-      } : "auto"
+      tool_choice: "auto"
     } : {})
   };
   const res = await fetchWithRetry(`${BASE_URL}/chat/completions`, {
@@ -159,7 +156,7 @@ async function callApi({
     if (res.status === 400 && useJson && /response_format|json|format/i.test(text)) {
       NO_JSON_MODE.add(model);
       console.warn(`[agent-runtime] ${model} rejected response_format — retrying without JSON mode`);
-      return callApi({ model, messages, tools, toolChoice, temperature, maxTokens, jsonMode: false }, attempt);
+      return callApi({ model, messages, tools, temperature, maxTokens, jsonMode: false }, attempt);
     }
     if (isPromptBlocked(res.status, text)) throw new PromptBlocked("prompt blocked by provider usage policy");
     throw new Error(`LLM ${res.status}: ${text.slice(0, 300)}`);
@@ -172,16 +169,17 @@ async function callApi({
   if (choice.finish_reason === "length" && empty) {
     if (attempt < 1) {
       console.warn(`[agent-runtime] model ${model} truncated by token limit — retrying with larger budget`);
-      return callApi({ model, messages, tools, toolChoice, temperature, maxTokens: Math.min(16384, maxTokens * 3), jsonMode }, attempt + 1);
+      return callApi({ model, messages, tools, temperature, maxTokens: Math.min(16384, maxTokens * 3), jsonMode }, attempt + 1);
     }
     throw new Error(`LLM ${model}: truncated with empty output after retry`);
   }
   return msg;
 }
 export async function chat(opts, simulate) {
+  const account = opts.account || accountStore.getStore() || null;
   const models = (Array.isArray(opts.model) ? opts.model : [opts.model]).filter(Boolean);
   let lastErr = new SimulationRequested("no model configured");
-  const live = models.filter(m => !breakerOpen(m));
+  const live = models.filter(m => !breakerOpen(account, m));
   if (!live.length && models.length && SIM_MODE !== "off" && simulate) {
     console.warn(`[agent-runtime] all models circuit-open — using simulation without retry`);
     return {
@@ -198,7 +196,7 @@ export async function chat(opts, simulate) {
         ...opts,
         model
       });
-      breakerOk(model);
+      breakerOk(account, model);
       return {
         message,
         simulated: false,
@@ -211,7 +209,7 @@ export async function chat(opts, simulate) {
         console.warn(`[agent-runtime] model ${model} blocked the prompt (provider usage policy) — not a model fault, skipping remaining models`);
         break;
       }
-      breakerFail(model);
+      breakerFail(account, model);
       console.warn(`[agent-runtime] model ${model} failed (${err.message})${pool.indexOf(model) < pool.length - 1 ? " — trying next enabled model" : ""}`);
     }
   }
@@ -323,24 +321,61 @@ export async function listModels() {
     return modelsCache.list;
   }
 }
-export function extractJson(text) {
-  if (!text) return null;
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const candidate = fenced ? fenced[1] : text;
-  const start = candidate.indexOf("{");
-  if (start < 0) return null;
-  let depth = 0;
-  for (let i = start; i < candidate.length; i++) {
-    if (candidate[i] === "{") depth++;else if (candidate[i] === "}") {
-      depth--;
-      if (depth === 0) {
-        try {
-          return JSON.parse(candidate.slice(start, i + 1));
-        } catch {
-          return null;
+const stripReasoning = s => String(s).replace(/<think>[\s\S]*?<\/think>/gi, " ").replace(/<\/?(?:think|reasoning|scratchpad|thought)>/gi, " ");
+const cleanJsonish = s => s.replace(/[\u201c\u201d]/g, '"').replace(/[\u2018\u2019]/g, "'").replace(/[\u0000-\u001f]+/g, " ").replace(/,\s*([}\]])/g, "$1");
+function balancedObjects(text) {
+  const objs = [];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== "{") continue;
+    let depth = 0,
+      inStr = false,
+      esc = false;
+    for (let j = i; j < text.length; j++) {
+      const c = text[j];
+      if (esc) {
+        esc = false;
+        continue;
+      }
+      if (c === "\\") {
+        esc = true;
+        continue;
+      }
+      if (c === '"') {
+        inStr = !inStr;
+        continue;
+      }
+      if (inStr) continue;
+      if (c === "{") depth++;else if (c === "}") {
+        depth--;
+        if (depth === 0) {
+          objs.push(text.slice(i, j + 1));
+          break;
         }
       }
     }
+  }
+  return objs;
+}
+export function extractJson(text) {
+  if (!text) return null;
+  const cleaned = stripReasoning(text);
+  const fences = [...cleaned.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)].map(m => m[1]);
+  const candidates = [];
+  for (const src of [...fences, cleaned]) for (const obj of balancedObjects(src)) candidates.push(obj);
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => b.length - a.length);
+  for (const c of candidates) {
+    let o = null;
+    try {
+      o = JSON.parse(c);
+    } catch {
+      try {
+        o = JSON.parse(cleanJsonish(c));
+      } catch {
+        o = null;
+      }
+    }
+    if (o && typeof o === "object" && !Array.isArray(o)) return o;
   }
   return null;
 }
