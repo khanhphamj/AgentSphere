@@ -7,6 +7,8 @@ const PROFILES = {
   "qwen/qwen3.6-27b": { tier: "mid", reasoning: 3, quantitative: 3, web: 3, coding: 3, synthesis: 3, vi: 5, speed: 3, cost: 2, rateLimitRisk: 4, jsonNative: false },
   "qwen/qwen3-5-27b": { tier: "mid", reasoning: 3, quantitative: 3, web: 3, coding: 3, synthesis: 3, vi: 5, speed: 3, cost: 2, rateLimitRisk: 4, jsonNative: false },
   "qwen/qwen3-coder-plus": { tier: "coder", reasoning: 3, quantitative: 3, web: 3, coding: 5, synthesis: 3, vi: 4, speed: 3, cost: 2, rateLimitRisk: 3, jsonNative: false },
+  "gemini/gemini-3.1-flash-lite": { tier: "small", reasoning: 3, quantitative: 3, web: 4, coding: 3, synthesis: 3, vi: 4, speed: 5, cost: 1, rateLimitRisk: 3, jsonNative: false },
+  "gemini/gemini-3-flash-preview": { tier: "mid", reasoning: 3, quantitative: 3, web: 4, coding: 3, synthesis: 3, vi: 4, speed: 4, cost: 2, rateLimitRisk: 3, jsonNative: false },
   "google/gemma-4-31b-it": { tier: "mid", reasoning: 3, quantitative: 2, web: 3, coding: 3, synthesis: 3, vi: 3, speed: 4, cost: 2, rateLimitRisk: 3, jsonNative: false },
   "google/gemma-3-27b-it": { tier: "mid", reasoning: 2, quantitative: 2, web: 3, coding: 2, synthesis: 2, vi: 3, speed: 4, cost: 2, rateLimitRisk: 3, jsonNative: false },
   "minimax/minimax-m2.5": { tier: "mid", reasoning: 3, quantitative: 3, web: 3, coding: 3, synthesis: 3, vi: 3, speed: 3, cost: 2, rateLimitRisk: 4, jsonNative: false },

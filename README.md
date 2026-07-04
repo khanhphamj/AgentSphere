@@ -313,6 +313,7 @@ enabled on the MaaS account:
 | `greennode/greenmind-medium-14b-r1` | 32k | 8k | ✓ |
 | `gemini/gemini-3.1-pro-preview`, `gemini-2.5-pro` | 128k | 16k | ✓ |
 | `gemini/gemini-2.5-flash` / `-flash-lite` | 128k | 8k | |
+| `gemini/gemini-3.1-flash-lite`, `gemini-3-flash-preview` | 128k | 8k | |
 | `bytedance/seed-1-6-250915` / `-flash-250715` | 128k | 8k | |
 | *(unknown model)* | 8k | 1k | conservative default |
 
@@ -324,7 +325,7 @@ turn, reasoning vs plain), tool rounds capped by window size, ≤5 tool calls pe
 round, tool results sliced to a per-model char cap, and `clampMessages` as the
 final guard — progressively truncating tool/assistant messages until the request
 fits 90% of the model's window. Model **outputs** are clamped too (`say` ≤120,
-`summary` ≤700, `keyPoints` ≤5×90, `argument` ≤400 chars), which keeps every
+`summary` ≤700, `keyPoints` ≤5×240, `argument` ≤400 chars), which keeps every
 downstream prompt (meeting `others`, consensus, report) and UI event small —
 faster calls, fewer tokens, no compounding growth.
 
