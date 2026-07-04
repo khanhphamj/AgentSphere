@@ -7,13 +7,16 @@ import { TopBar, Dock, ZoomControls, ActivityFeed, Login, Onboarding, Toaster } 
 import { AgentPanel, AgentDashboard, MissionPanel, TasksPanel, MissionPill, IncidentPill, VerdictReveal, InboxPanel } from "./components/panels.jsx";
 import "./styles/agentsphere.css";
 const AMBIENT_LOG = {
-  cafe: "took a break at the food hall",
+  cafe: "grabbed a pantry coffee",
   gym: "hit the GreenNode gym",
   pool: "went for a swim in the pool",
-  park: "went for a walk around the lake",
-  field: "kicked a ball around the VNG pitch",
+  park: "visited cây lộc vừng siuuu to",
   court: "shot some hoops on the basketball court",
-  courtyard: "relaxed in The Loop's courtyard",
+  courtyard: "relaxed at the Seating Area",
+  atrium: "admired the atrium tree",
+  lobby: "hung out in the Main Lobby",
+  store: "did a 7-Eleven snack run",
+  game: "played a round at the Game Corner",
   nap: "dozed off at their desk",
   resume: "returned to their desk"
 };

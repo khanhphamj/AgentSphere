@@ -1,7 +1,7 @@
 import React from "react";
 import AS from "../data.js";
 import { api } from "../api.js";
-import { GlassPanel, DSIcon, StatusDot, agentPortrait } from "./chrome.jsx";
+import { GlassPanel, DSIcon, StatusDot, agentPortrait, STATUS_COLOR } from "./chrome.jsx";
 const DSLG = () => (window.MSSDesignSystem_fa0208 || {}).LiquidGlass;
 function useWide() {
   const [wide, setWide] = React.useState(() => {
@@ -132,7 +132,9 @@ export function AgentPanel({
   };
   return <GlassPanel side="right" label={def.name}>
       <div className="as-panel-head">
-        <img className="as-avatar" src={agentPortrait(def)} width="40" height="40" alt={def.name} />
+        <img className="as-avatar" src={agentPortrait(def)} width="40" height="40" alt={def.name} style={{
+        "--as-ring": STATUS_COLOR[st.state] || STATUS_COLOR.idle
+      }} />
         <div className="as-col as-grow">
           <span className="as-row" style={{
           gap: 8,
@@ -302,7 +304,7 @@ export function AgentPanel({
       {isLead && <div style={{
       display: "flex",
       gap: 8,
-      padding: "10px 14px 14px"
+      padding: "8px 16px 16px"
     }}>
           <input className="as-input" value={draft} placeholder={P.missionPh} onChange={e => setDraft(e.target.value)} onKeyDown={e => e.key === "Enter" && assign()} />
           <button className="as-btn primary" onClick={assign} disabled={sending} style={{
@@ -312,7 +314,7 @@ export function AgentPanel({
           </button>
         </div>}
       {err && <div className="as-err" style={{
-      margin: "0 14px 12px"
+      margin: "0 16px 16px"
     }}>{err}</div>}
     </GlassPanel>;
 }
@@ -348,7 +350,9 @@ export function AgentDashboard({
         const rel = relByAgent[def.id];
         return <div key={def.id} className="as-card click" onClick={() => onAgent(def.id)}>
               <div className="as-row">
-                <img className="as-avatar" src={agentPortrait(def)} width="40" height="40" alt={def.name} />
+                <img className="as-avatar" src={agentPortrait(def)} width="40" height="40" alt={def.name} style={{
+              "--as-ring": STATUS_COLOR[st.state] || STATUS_COLOR.idle
+            }} />
                 <div className="as-col as-grow">
                   <span className="as-name" style={{
                 color: AS.PROVIDERS[def.provider].color

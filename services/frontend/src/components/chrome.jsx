@@ -89,7 +89,7 @@ export function TopBar({
         <span className={"as-live-dot" + (connected ? "" : " offline")}></span>
         {worldName}
         <span className="as-world-sub" style={{
-        color: "var(--ink-4)"
+        color: "var(--ink-3)"
       }}>· {onlineCount} agents {AS.STR.misc.online}</span>
       </div>
     </div>;

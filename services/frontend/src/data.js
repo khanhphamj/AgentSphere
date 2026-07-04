@@ -45,7 +45,7 @@ export const AGENTS = [
   {
     id: "atlas", name: "Atlas", lead: true, role: "Lead orchestrator",
     provider: "openai", model: "openai/gpt-5-mini", models: ["openai/gpt-5-mini"], agentRole: "orchestrator", policyRole: "orchestrator",
-    home: "office", desk: { x: 9, y: 7 },
+    home: "office", desk: { x: 10, y: 14 },
     palette: { shirt: "#4D6BFE", hair: "#3A2E28", skin: "#EFC9A8" },
     skills: ["Planning", "Phasing", "Check & synthesis"],
     bio: "The lead. Splits a mission into phases, hands each worker a concrete focus, then after every phase checks the findings, synthesizes them, and decides whether the squad needs another phase. Writes the final report. Uses no tools itself."
@@ -53,7 +53,7 @@ export const AGENTS = [
   {
     id: "nova", name: "Nova", role: "Generalist agent",
     provider: "google", model: "google/gemma-4-31b-it", models: ["google/gemma-4-31b-it"], agentRole: "research", policyRole: "worker",
-    home: "office", desk: { x: 15, y: 7 },
+    home: "office", desk: { x: 14, y: 14 },
     palette: { shirt: "#7C5CE0", hair: "#6B4A2F", skin: "#F2D3B3" },
     skills: ["Web & sources", "Data & models", "Risk & options"],
     bio: "A generalist worker. Takes whatever focus the lead assigns each phase — facts, numbers, risks or alternatives — with the full toolbox, builds on what teammates found, and grounds every claim."
@@ -61,7 +61,7 @@ export const AGENTS = [
   {
     id: "quill", name: "Quill", role: "Generalist agent",
     provider: "qwen", model: "qwen/qwen3.6-27b", models: ["qwen/qwen3.6-27b"], agentRole: "analyst", policyRole: "worker",
-    home: "office", desk: { x: 9, y: 11 },
+    home: "office", desk: { x: 18, y: 14 },
     palette: { shirt: "#4D6BFE", hair: "#26221F", skin: "#E8BD96" },
     skills: ["Web & sources", "Data & models", "Risk & options"],
     bio: "A generalist worker. Takes whatever focus the lead assigns each phase, runs in parallel with the squad, and exchanges notes with teammates before finalizing its conclusion."
@@ -69,7 +69,7 @@ export const AGENTS = [
   {
     id: "lumi", name: "Lumi", role: "Generalist agent",
     provider: "qwen", model: "qwen/qwen3.7-plus", models: ["qwen/qwen3.7-plus"], agentRole: "critic", policyRole: "worker",
-    home: "office", desk: { x: 21, y: 7 },
+    home: "office", desk: { x: 10, y: 18 },
     palette: { shirt: "#0FA47F", hair: "#4A3B66", skin: "#F4D8BE" },
     skills: ["Web & sources", "Data & models", "Risk & options"],
     bio: "A generalist worker. Equally at home gathering evidence, stress-testing risks, or quantifying trade-offs — whatever the phase's focus calls for."
@@ -77,7 +77,7 @@ export const AGENTS = [
   {
     id: "echo", name: "Echo", role: "Generalist agent",
     provider: "openai", model: "openai/gpt-5-nano", models: ["openai/gpt-5-nano"], agentRole: "creative", policyRole: "worker",
-    home: "office", desk: { x: 15, y: 11 },
+    home: "office", desk: { x: 14, y: 18 },
     palette: { shirt: "#2563EB", hair: "#7A2E45", skin: "#EFC9A8" },
     skills: ["Web & sources", "Data & models", "Risk & options"],
     bio: "A generalist worker. Picks up any assignment the lead hands out, reads the shared blackboard, and reconciles with peers before concluding."
@@ -85,7 +85,7 @@ export const AGENTS = [
   {
     id: "pixel", name: "Pixel", role: "Generalist agent",
     provider: "minimax", model: "minimax/minimax-m2.5", models: ["minimax/minimax-m2.5"], agentRole: "reporter", policyRole: "worker",
-    home: "office", desk: { x: 21, y: 11 },
+    home: "office", desk: { x: 18, y: 18 },
     palette: { shirt: "#1F8A48", hair: "#1F1B18", skin: "#E8BD96" },
     skills: ["Web & sources", "Data & models", "Risk & options"],
     bio: "A generalist worker. Takes whatever focus the lead assigns each phase and grounds every figure and source in a real tool result."
@@ -99,16 +99,18 @@ export const TEAMS = [
 ];
 
 export const PLACES = {
-  office: { label: "The Loop — HQ ring", door: { x: 18, y: 19 } },
-  courtyard: { label: "Office lounge", door: { x: 18, y: 18 }, spots: [{ x: 9, y: 17 }, { x: 13, y: 17 }, { x: 17, y: 17 }, { x: 21, y: 17 }, { x: 15, y: 18 }] },
-  gym: { label: "GreenNode Gym", door: { x: 46, y: 15 }, spots: [{ x: 39, y: 9, ex: "pullup" }, { x: 43, y: 9, ex: "bench" }, { x: 49, y: 9, ex: "run" }, { x: 51, y: 9, ex: "run" }, { x: 41, y: 12, ex: "pushup" }, { x: 44, y: 12, ex: "pushup" }, { x: 54, y: 9, ex: "weights" }] },
-  pool: { label: "Swimming pool", door: { x: 27, y: 38 }, spots: [{ x: 26, y: 41 }, { x: 28, y: 42 }, { x: 29, y: 40 }, { x: 26, y: 43 }, { x: 30, y: 41 }] },
-  library: { label: "Library", door: { x: 11, y: 35 } },
-  cafe: { label: "Food hall", door: { x: 30, y: 33 }, spots: [{ x: 39, y: 28 }, { x: 42, y: 28 }, { x: 41, y: 30 }, { x: 44, y: 29 }, { x: 40, y: 32 }] },
-  park: { label: "Lake & trail", door: { x: 15, y: 37 }, spots: [{ x: 8, y: 41 }, { x: 13, y: 38 }, { x: 18, y: 38 }, { x: 22, y: 41 }, { x: 15, y: 45 }] },
-  court: { label: "Basketball court", door: { x: 51, y: 25 }, spots: [{ x: 49, y: 28 }, { x: 53, y: 30 }, { x: 51, y: 28 }, { x: 54, y: 31 }, { x: 50, y: 31 }] },
-  field: { label: "VNG football pitch", door: { x: 45, y: 34 }, spots: [{ x: 45, y: 38 }, { x: 50, y: 40 }, { x: 55, y: 37 }, { x: 47, y: 42 }, { x: 52, y: 38 }] },
-  meeting: { label: "Meeting room", door: { x: 26, y: 16 }, spots: [{ x: 25, y: 15 }, { x: 22, y: 12 }, { x: 28, y: 12 }, { x: 22, y: 15 }, { x: 28, y: 15 }, { x: 25, y: 12 }] }
+  office: { label: "Văn Phòng 02 — The Loop", door: { x: 15, y: 22 } },
+  courtyard: { label: "Seating Area", door: { x: 31, y: 13 }, spots: [{ x: 30, y: 16 }, { x: 32, y: 16 }, { x: 30, y: 19 }, { x: 32, y: 19 }, { x: 31, y: 20 }] },
+  atrium: { label: "Atrium", door: { x: 41, y: 12 }, spots: [{ x: 40, y: 16 }, { x: 43, y: 16 }, { x: 40, y: 18 }, { x: 43, y: 18 }, { x: 41, y: 19 }, { x: 42, y: 14 }] },
+  lobby: { label: "Main Lobby", door: { x: 44, y: 29 }, spots: [{ x: 41, y: 27 }, { x: 43, y: 27 }, { x: 46, y: 27 }, { x: 42, y: 28 }, { x: 45, y: 26 }] },
+  cafe: { label: "Pantry", door: { x: 54, y: 16 }, spots: [{ x: 55, y: 17 }, { x: 56, y: 17 }, { x: 57, y: 17 }, { x: 55, y: 18 }] },
+  gym: { label: "Phòng Đa Năng — Gym", door: { x: 54, y: 26 }, spots: [{ x: 56, y: 24, ex: "pullup" }, { x: 57, y: 26, ex: "bench" }, { x: 55, y: 26, ex: "run" }, { x: 56, y: 27, ex: "weights" }, { x: 55, y: 28, ex: "pushup" }] },
+  pool: { label: "Swimming Pool", door: { x: 59, y: 13 }, spots: [{ x: 55, y: 12 }, { x: 58, y: 12 }, { x: 53, y: 6 }, { x: 61, y: 8 }] },
+  park: { label: "Cây Lộc Vừng", door: { x: 5, y: 28 }, spots: [{ x: 4, y: 24 }, { x: 7, y: 24 }, { x: 4, y: 27 }, { x: 7, y: 27 }] },
+  store: { label: "7-Eleven", door: { x: 8, y: 26 }, spots: [{ x: 9, y: 26 }, { x: 10, y: 25 }] },
+  game: { label: "Game Corner", door: { x: 41, y: 10 }, spots: [{ x: 37, y: 9 }, { x: 39, y: 9 }, { x: 41, y: 9 }, { x: 43, y: 9 }, { x: 45, y: 9 }] },
+  court: { label: "Basketball", door: { x: 6, y: 38 }, spots: [{ x: 5, y: 35 }, { x: 8, y: 36 }, { x: 6, y: 37 }] },
+  meeting: { label: "Meeting Room", door: { x: 39, y: 7 }, spots: [{ x: 37, y: 5 }, { x: 41, y: 5 }, { x: 37, y: 6 }, { x: 38, y: 6 }, { x: 40, y: 6 }, { x: 41, y: 6 }] }
 };
 
 export const AMBIENT_CHAT = [
@@ -139,30 +141,47 @@ export const HUDDLES = [
     "I'll send you my benchmark notes later.",
     "Deal. This coffee has dense embeddings."
   ] },
-  { places: ["park", "courtyard"], lines: [
-    "A lap around the lake to cool the temperature.",
+  { places: ["courtyard"], lines: [
+    "These sofas beat any standing desk.",
     "Good call. My context is almost full.",
     "A quick compaction after this and I'm fresh.",
-    "This lake fine-tunes the soul."
+    "The atrium tree fine-tunes the soul."
   ] },
-  { places: ["field", "court"], lines: [
-    "Pass it here! We're winning this one.",
-    "That shot… we may need to retrain you.",
-    "Blame the gradients, not me.",
-    "One more match, then back to deploys."
+  { places: ["atrium", "lobby"], lines: [
+    "Have you seen the lộc vừng blooming?",
+    "Pink tassels everywhere — great photo op.",
+    "The skylight makes the island tree glow.",
+    "One more lap, then back to deploys."
   ] },
-  { places: ["meeting"], lines: [
+  { places: ["lobby"], lines: [
     "Quick five-minute sync on the subtasks.",
     "OK. I'm stuck on the schema bit.",
     "I'll reshare the architecture doc.",
     "With the doc it's a quick fix. Thanks!"
   ] },
-  { places: ["cafe", "park"], lines: [
+  { places: ["cafe", "lobby"], lines: [
     "This sprint is intense. Fun though.",
     "Yeah — as long as we're under token budget.",
     "The Critic's been razor-sharp lately.",
     "That's how the good calls get made."
   ] }
+];
+
+export const AMBIENT_DUO = [
+  ["Cà phê pantry không?", "5 phút nữa nhé."],
+  ["Demo hồi nãy mượt thật.", "Nhờ retry logic đó."],
+  ["Atrium hôm nay mát ghê.", "Cây lộc vừng ra hoa kìa."],
+  ["Trưa nay ghé 7-Eleven nha?", "Ok, tiện lấy thêm cà phê sữa."],
+  ["P95 sáng nay còn 140ms.", "Đẹp. Giữ vậy tới lúc release nhé."],
+  ["Game Corner làm ván không?", "Thua thì dọn blackboard đó nha."],
+  ["Hồ bơi giờ này vắng lắm.", "Tan ca mình bơi vài vòng đi."],
+  ["Token budget tháng này sao rồi?", "Còn dư 12% — thoải mái."],
+  ["Mission sáng chạy ổn không?", "Một phase là xong, lead khen nữa."],
+  ["Benchmark mới vừa drop đó.", "Để mình chạy thử trên staging."],
+  ["Ghế seating area êm thiệt.", "Ngồi đây compact context là khỏe liền."],
+  ["Chiều đi gym không?", "Giữ giùm mình cái treadmill nhé."],
+  ["Lobby treo chữ WE ARE VNG đỏ rực kìa.", "Chụp một tấm làm avatar thôi."],
+  ["Web search hôm nay lẹ ghê.", "Cache vừa được warm lại đó."]
 ];
 
 export const CRASH_ERRORS = [
@@ -350,5 +369,5 @@ export const STR = {
   }
 };
 
-export const AS_DATA = { PROVIDERS, MODELS, AGENTS, TEAMS, PLACES, AMBIENT_CHAT, AMBIENT_WORK, HUDDLES, CRASH_ERRORS, BACK_ONLINE, STR, providerOf };
+export const AS_DATA = { PROVIDERS, MODELS, AGENTS, TEAMS, PLACES, AMBIENT_CHAT, AMBIENT_WORK, AMBIENT_DUO, HUDDLES, CRASH_ERRORS, BACK_ONLINE, STR, providerOf };
 export default AS_DATA;
