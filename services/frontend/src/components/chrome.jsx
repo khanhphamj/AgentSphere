@@ -89,8 +89,8 @@ export function TopBar({
         <span className={"as-live-dot" + (connected ? "" : " offline")}></span>
         {worldName}
         <span className="as-world-sub" style={{
-        color: "var(--ink-4)"
-      }}>· {onlineCount} agent {AS.STR.misc.online}</span>
+        color: "var(--ink-3)"
+      }}>· {onlineCount} agents {AS.STR.misc.online}</span>
       </div>
     </div>;
   const right = <div className="as-topbar">
@@ -134,6 +134,27 @@ export function Dock({
     id: "tasks",
     icon: "check-circle"
   }];
+  const TIPS = {
+    agents: "Team & each agent's calibration record",
+    inbox: "Inbox — the squad posts a summary after each mission",
+    activity: "Live campus activity log",
+    tasks: "Mission list & history",
+    mission: "Start here — ask a question or a decision"
+  };
+  const [pulse, setPulse] = React.useState(() => {
+    try {
+      return localStorage.getItem("as.seenCompose") !== "1";
+    } catch {
+      return false;
+    }
+  });
+  const fireMission = () => {
+    setPulse(false);
+    try {
+      localStorage.setItem("as.seenCompose", "1");
+    } catch {}
+    onMission();
+  };
   const wrapRef = React.useRef(null);
   const [ind, setInd] = React.useState(null);
   React.useLayoutEffect(() => {
@@ -174,7 +195,7 @@ export function Dock({
       width: ind.width,
       height: ind.height
     } : undefined}></span>
-      {items.map(it => <button key={it.id} data-id={it.id} className={"as-dock-btn" + (active === it.id ? " on" : "")} onClick={() => onSelect(active === it.id ? null : it.id)}>
+      {items.map(it => <button key={it.id} data-id={it.id} title={TIPS[it.id]} className={"as-dock-btn" + (active === it.id ? " on" : "")} onClick={() => onSelect(active === it.id ? null : it.id)}>
           <span style={{
         position: "relative",
         display: "inline-flex"
@@ -184,7 +205,7 @@ export function Dock({
           </span>
           {AS.STR.dock[it.id] || it.label}
         </button>)}
-      <button className={"as-dock-btn cta" + (active === "mission" ? " on" : "")} data-id="mission" onClick={onMission}>
+      <button className={"as-dock-btn cta" + (active === "mission" ? " on" : "") + (pulse ? " pulse" : "")} data-id="mission" title={TIPS.mission} onClick={fireMission}>
         <PixelIcon name="mission" size={22} />
         {AS.STR.dock.mission}
       </button>
@@ -206,24 +227,27 @@ export function ActivityFeed({
   onClose,
   onAgent
 }) {
+  const [missionOnly, setMissionOnly] = React.useState(false);
+  const shown = missionOnly ? items.filter(it => it.kind !== "ambient") : items;
   return <GlassPanel side="right" label={AS.STR.panel.activity}>
       <div className="as-panel-head">
         <span className="as-panel-title">{AS.STR.panel.activity}</span>
+        <button className="as-eyebrow-act" onClick={() => setMissionOnly(v => !v)} title="Filter out campus chatter, show only mission events">{missionOnly ? "All" : "Mission only"}</button>
         <button className="as-icon-btn" onClick={onClose} aria-label={AS.STR.panel.close}><DSIcon name="x" size={15} /></button>
       </div>
       <div className="as-panel-body" aria-live="polite">
-        {items.length === 0 && <div style={{
+        {shown.length === 0 && <div style={{
         padding: "26px 8px",
         textAlign: "center",
         font: "400 13px var(--font-body)",
         color: "var(--ink-4)"
       }}>
-            No activity yet — assign a mission to get things moving.
+            {missionOnly ? "No mission events yet." : "No activity yet — assign a mission to get started."}
           </div>}
-        {items.map(it => {
+        {shown.map(it => {
         const def = it.agentId ? AS.AGENTS.find(a => a.id === it.agentId) : null;
         const color = def ? AS.PROVIDERS[def.provider].color : "var(--ink-5)";
-        return <div key={it.id} className="as-feed-item" style={{
+        return <div key={it.id} className={"as-feed-item" + (it.kind === "ambient" ? " ambient" : "")} style={{
           cursor: def ? "pointer" : "default"
         }} onClick={() => def && onAgent(def.id)}>
               <span className="as-feed-time">{it.time}</span>
@@ -235,6 +259,18 @@ export function ActivityFeed({
       })}
       </div>
     </GlassPanel>;
+}
+export function Toaster({
+  toasts,
+  onDismiss
+}) {
+  if (!toasts || !toasts.length) return null;
+  return ReactDOM.createPortal(<div className="as-toaster" aria-live="polite">
+      {toasts.map(t => <div key={t.id} className={"as-toast " + (t.kind || "info")} role="status" onClick={() => onDismiss(t.id)}>
+          <span className="as-toast-dot"></span>
+          <span className="as-toast-msg">{t.msg}</span>
+        </div>)}
+    </div>, document.body);
 }
 export function userFromEmail(email) {
   const local = (email || "").split("@")[0] || "user";
@@ -621,8 +657,8 @@ export function Onboarding({
       </div>
       <div className="as-onb-eyebrow" style={{
       marginTop: 10
-    }}>Mandate thường trực</div>
-      <input className="as-input as-input-sm" value={a.mandate || ""} placeholder="vd: chỉ tin nguồn chính thống VN; luôn nêu rủi ro pháp lý…" onChange={e => setAgentMandate(a.id, e.target.value)} aria-label="mandate" />
+    }}>Standing mandate</div>
+      <input className="as-input as-input-sm" value={a.mandate || ""} placeholder="e.g. only trust official VN sources; always flag legal risk…" onChange={e => setAgentMandate(a.id, e.target.value)} aria-label="mandate" />
     </div>;
   return <div className="as-onb-backdrop">
       {LG ? <LG className="as-onb-host" radius={24} intensity="heavy" hoverLift={false} refraction={false}>
@@ -651,6 +687,7 @@ export function Onboarding({
               <div className="as-onb-squad">
                 {squad.map(agentCard)}
               </div>
+              {!returning && O.onbNext && <div className="as-onb-next">{O.onbNext}</div>}
               <div className="as-onb-foot" style={{
             justifyContent: "flex-end"
           }}>

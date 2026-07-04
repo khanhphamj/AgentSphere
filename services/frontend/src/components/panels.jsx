@@ -1,7 +1,7 @@
 import React from "react";
 import AS from "../data.js";
 import { api } from "../api.js";
-import { GlassPanel, DSIcon, StatusDot, agentPortrait } from "./chrome.jsx";
+import { GlassPanel, DSIcon, StatusDot, agentPortrait, STATUS_COLOR } from "./chrome.jsx";
 const DSLG = () => (window.MSSDesignSystem_fa0208 || {}).LiquidGlass;
 function useWide() {
   const [wide, setWide] = React.useState(() => {
@@ -100,6 +100,8 @@ export function AgentPanel({
   const def = AS.AGENTS.find(a => a.id === agentId);
   const [draft, setDraft] = React.useState("");
   const [memory, setMemory] = React.useState(null);
+  const [err, setErr] = React.useState("");
+  const [sending, setSending] = React.useState(false);
   const P = AS.STR.panel;
   React.useEffect(() => {
     setDraft("");
@@ -114,15 +116,25 @@ export function AgentPanel({
   const isLead = !!def.lead;
   const st = liveState || {};
   const isDown = st.state === "down" || st.state === "reviving";
-  const assign = () => {
+  const assign = async () => {
     const text = draft.trim();
-    if (!text) return;
-    setDraft("");
-    onAssignMission(text);
+    if (!text || sending) return;
+    setErr("");
+    setSending(true);
+    try {
+      await onAssignMission(text);
+      setDraft("");
+    } catch (e) {
+      setErr(e.message || "Could not assign the task — try again.");
+    } finally {
+      setSending(false);
+    }
   };
   return <GlassPanel side="right" label={def.name}>
       <div className="as-panel-head">
-        <img className="as-avatar" src={agentPortrait(def)} width="40" height="40" alt={def.name} />
+        <img className="as-avatar" src={agentPortrait(def)} width="40" height="40" alt={def.name} style={{
+        "--as-ring": STATUS_COLOR[st.state] || STATUS_COLOR.idle
+      }} />
         <div className="as-col as-grow">
           <span className="as-row" style={{
           gap: 8,
@@ -292,22 +304,41 @@ export function AgentPanel({
       {isLead && <div style={{
       display: "flex",
       gap: 8,
-      padding: "10px 14px 14px"
+      padding: "8px 16px 16px"
     }}>
           <input className="as-input" value={draft} placeholder={P.missionPh} onChange={e => setDraft(e.target.value)} onKeyDown={e => e.key === "Enter" && assign()} />
-          <button className="as-btn primary" onClick={assign} style={{
+          <button className="as-btn primary" onClick={assign} disabled={sending} style={{
         padding: "10px 14px"
       }}>
             <DSIcon name="send" size={15} />
           </button>
         </div>}
+      {err && <div className="as-err" style={{
+      margin: "0 16px 16px"
+    }}>{err}</div>}
     </GlassPanel>;
+}
+function EmptyState({ emoji, title, line, cta, onCta }) {
+  return <div className="as-empty">
+      <div className="as-empty-ico">{emoji}</div>
+      <div className="as-empty-title">{title}</div>
+      <div className="as-empty-line">{line}</div>
+      {cta && onCta && <button className="as-btn primary as-empty-cta" onClick={onCta}>{cta}</button>}
+    </div>;
 }
 export function AgentDashboard({
   states,
   onClose,
   onAgent
 }) {
+  const [cal, setCal] = React.useState(null);
+  React.useEffect(() => {
+    api.calibration().then(setCal).catch(() => {});
+  }, []);
+  const relByAgent = {};
+  (cal?.byAgent || []).forEach(r => {
+    relByAgent[r.name] = r;
+  });
   return <GlassPanel side="right" label={AS.STR.panel.agents}>
       <div className="as-panel-head">
         <span className="as-panel-title">{AS.STR.panel.agents}</span>
@@ -316,9 +347,12 @@ export function AgentDashboard({
       <div className="as-panel-body">
         {AS.AGENTS.map(def => {
         const st = states[def.id] || {};
+        const rel = relByAgent[def.id];
         return <div key={def.id} className="as-card click" onClick={() => onAgent(def.id)}>
               <div className="as-row">
-                <img className="as-avatar" src={agentPortrait(def)} width="40" height="40" alt={def.name} />
+                <img className="as-avatar" src={agentPortrait(def)} width="40" height="40" alt={def.name} style={{
+              "--as-ring": STATUS_COLOR[st.state] || STATUS_COLOR.idle
+            }} />
                 <div className="as-col as-grow">
                   <span className="as-name" style={{
                 color: AS.PROVIDERS[def.provider].color
@@ -327,16 +361,27 @@ export function AgentDashboard({
                 </div>
                 <StatusDot state={st.state || "idle"} />
               </div>
+              {rel && rel.n > 0 && <div className="as-rel" title={`${rel.n} predictions · ${rel.decided} with a known outcome · avg predicted ${rel.avgPredicted ?? "—"}%`}>
+                  <span className="as-rel-label">calibration</span>
+                  <div className="as-rel-track"><div className="as-rel-fill" style={{
+              width: (rel.hitRate ?? 0) + "%"
+            }}></div></div>
+                  <span className="as-rel-val">{rel.hitRate != null ? rel.hitRate + "%" : "—"} <i>n={rel.decided}</i></span>
+                </div>}
             </div>;
       })}
+        {cal && cal.withOutcome === 0 && <EmptyState emoji="🎯" title="No calibration data yet" line="Mark how missions actually panned out (on the report) to build the squad's confidence record — “when an agent says 80%, how often is it right?”." />}
       </div>
     </GlassPanel>;
 }
 const STANCE_LABEL = {
   support: "support",
   oppose: "oppose",
-  conditional: "conditional"
+  conditional: "conditional",
+  insufficient: "insufficient"
 };
+const FRAGILITY_LABEL = { solid: "solid", moderate: "moderate", brittle: "brittle" };
+const MISSION_STATUS_LABEL = { done: "Done", failed: "Failed", executing: "Running", planning: "Planning", meeting: "In meeting", reporting: "Reporting", clarifying: "Needs you", queued: "Queued", event: "Event" };
 const scrollParent = el => {
   let n = el && el.parentElement;
   while (n) {
@@ -346,54 +391,123 @@ const scrollParent = el => {
   }
   return null;
 };
+const VERDICT_META = decision => {
+  if (!decision) return null;
+  const d = String(decision);
+  if (/do-not-proceed/.test(d)) return {
+    kind: "no",
+    label: "Do not proceed"
+  };
+  if (/conditional/.test(d)) return {
+    kind: "cond",
+    label: "Proceed with conditions"
+  };
+  if (/proceed/.test(d)) return {
+    kind: "go",
+    label: "Proceed"
+  };
+  if (/informational/.test(d)) return {
+    kind: "info",
+    label: "Informational"
+  };
+  return {
+    kind: "info",
+    label: d
+  };
+};
+function RobustnessChip({ f }) {
+  if (!f) return null;
+  return <span className={"as-robust-chip " + f.label} title={`Robustness = how easily the consensus could flip · support ${f.split.support} · oppose ${f.split.oppose} · conditional ${f.split.conditional}`}>
+      <span className="as-robust-dot"></span>{FRAGILITY_LABEL[f.label] || f.label} consensus · {f.robustness}{f.knifeEdge ? " · knife-edge" : ""}
+    </span>;
+}
+const OUTCOME_OPTS = [["right", "✓ Panned out"], ["missed", "✗ Missed"], ["surprising", "! Surprising"], ["untested", "· Not yet"]];
+function OutcomeChips({ missionId, initial }) {
+  const [val, setVal] = React.useState(initial || null);
+  const [busy, setBusy] = React.useState(false);
+  const pick = async v => {
+    if (busy) return;
+    setVal(v);
+    setBusy(true);
+    try {
+      await api.setMissionOutcome(missionId, v);
+    } catch {}
+    setBusy(false);
+  };
+  return <div className="as-outcome">
+      <span className="as-outcome-q">How did this pan out?</span>
+      <div className="as-outcome-btns">
+        {OUTCOME_OPTS.map(([v, label]) => <button key={v} className={"as-outcome-btn" + (val === v ? " on" : "")} disabled={busy} onClick={() => pick(v)}>{label}</button>)}
+      </div>
+    </div>;
+}
 function MeetingTranscript({
   turns,
   live,
-  decision
+  decision,
+  rationale,
+  conditions,
+  fragility
 }) {
   const endRef = React.useRef(null);
   const prevLen = React.useRef(0);
   React.useEffect(() => {
-    if (turns.length > prevLen.current && endRef.current) {
+    if ((turns.length > prevLen.current || decision) && endRef.current) {
       const sc = scrollParent(endRef.current);
-      const nearBottom = !sc || sc.scrollHeight - sc.scrollTop - sc.clientHeight < 160;
+      const nearBottom = !sc || sc.scrollHeight - sc.scrollTop - sc.clientHeight < 200;
       if (nearBottom) endRef.current.scrollIntoView({
         behavior: "smooth",
         block: "nearest"
       });
     }
     prevLen.current = turns.length;
-  }, [turns.length]);
+  }, [turns.length, decision]);
   const newestIdx = turns.length - 1;
   const lastStance = {};
   let curRound = null;
   const rows = [];
   turns.forEach((turn, i) => {
+    const isNew = live && i === newestIdx;
     if (turn.round != null && turn.round !== curRound) {
       curRound = turn.round;
-      rows.push(<div key={"r" + i} className="as-round-head">Round {curRound}</div>);
+      rows.push(<div key={"r" + i} className="as-chat-round"><span>Round {curRound}</span></div>);
+    }
+    if (turn.director) {
+      rows.push(<div key={i} className={"as-chat-msg as-chat-msg-you" + (isNew ? " as-chat-in" : "")}>
+          <div className="as-chat-col as-chat-col-you">
+            <span className="as-chat-name as-chat-name-you">⚖ Director</span>
+            <div className="as-chat-bubble as-chat-bubble-you">{turn.text || turn.argument || turn.say}</div>
+          </div>
+        </div>);
+      return;
     }
     const def = AS.AGENTS.find(a => a.id === turn.agentId);
     const color = def ? AS.PROVIDERS[def.provider].color : "var(--ink-4)";
     const prev = lastStance[turn.agentId];
     const changed = prev && turn.stance && prev !== turn.stance;
     if (turn.stance) lastStance[turn.agentId] = turn.stance;
-    rows.push(<div key={i} className={"as-turn" + (live && i === newestIdx ? " as-turn-new" : "")}>
-        <span className="as-turn-dot" style={{
-        background: color
-      }}></span>
-        <div className="as-turn-body">
-          <span className="as-turn-name" style={{
-          color
-        }}>{def ? def.name : "?"}</span>
-          <span className="as-turn-text">{turn.argument || turn.say}</span>
-          <div className="as-turn-tags">
+    const towardName = turn.towardAgentId ? (AS.AGENTS.find(a => a.id === turn.towardAgentId) || {}).name : null;
+    rows.push(<div key={i} className={"as-chat-msg" + (isNew ? " as-chat-in" : "") + (turn.conceded ? " as-chat-conceded" : "")}>
+        {def ? <img className="as-chat-av" src={agentPortrait(def)} width="30" height="30" alt="" style={{
+        borderColor: color
+      }} /> : <span className="as-chat-av" />}
+        <div className="as-chat-col">
+          <div className="as-chat-head">
+            <span className="as-chat-name" style={{
+            color
+          }}>{def ? def.name : "?"}</span>
+            {def && def.lead && <span className="as-chat-chair">chair</span>}
             {turn.stance && <span className={"as-turn-stance " + turn.stance}>{STANCE_LABEL[turn.stance] || turn.stance}</span>}
             {changed && <span className="as-turn-change">↻ {STANCE_LABEL[prev] || prev} → {STANCE_LABEL[turn.stance] || turn.stance}</span>}
           </div>
+          <div className="as-chat-bubble" style={{
+          "--accent": color
+        }}>{turn.argument || turn.say}</div>
+          {turn.conceded && <div className="as-chat-concede">🤝 conceded{towardName ? ` to ${towardName}` : ""} — changed its vote</div>}
         </div>
       </div>);
   });
+  const concededCount = turns.filter(t => t.conceded).length;
   let sup = 0,
     opp = 0;
   turns.forEach(t => {
@@ -403,43 +517,60 @@ function MeetingTranscript({
   const pos = decision ? /do-not-proceed/.test(decision) ? -1 : /proceed/.test(decision) ? 1 : 0 : tot ? (sup - opp) / tot : 0;
   const leftPct = 50 + pos * 44;
   const tokColor = pos < -0.05 ? "#E8A53C" : pos > 0.05 ? "#1ED760" : "#E5C46B";
-  return <div>
-      <div className="as-tug">
-        <span className="as-tug-end hold">Hold</span>
-        <div className="as-tug-track">
-          <div className="as-tug-fill" style={{
+  const verdict = VERDICT_META(decision);
+  return <div className="as-chat-wrap">
+      {rows.length > 0 && <div className="as-tug">
+          <span className="as-tug-end hold">Hold</span>
+          <div className="as-tug-track">
+            <div className="as-tug-fill" style={{
           width: Math.abs(pos) * 44 + "%",
           left: pos < 0 ? leftPct + "%" : "50%",
           background: tokColor
         }}></div>
-          <div className={"as-tug-token" + (decision ? " snap" : "")} style={{
+            <div className={"as-tug-token" + (decision ? " snap" : "")} style={{
           left: leftPct + "%",
           background: tokColor
         }}></div>
-        </div>
-        <span className="as-tug-end go">Proceed</span>
+          </div>
+          <span className="as-tug-end go">Proceed</span>
+        </div>}
+      <div className="as-chat">
+        {concededCount > 0 && <div className="as-chat-minds">⟳ minds changed: {concededCount}</div>}
+        {rows.length === 0 && live && <div className="as-chat-convening"><span className="as-chat-convening-icon">🏛</span> The squad is convening…</div>}
+        {rows}
+        {live && rows.length > 0 && !decision && <div className="as-chat-typing"><i></i><i></i><i></i><span>debating…</span></div>}
+        {verdict && <div className={"as-chat-verdict " + verdict.kind}>
+            <div className="as-chat-verdict-top"><span className="as-chat-verdict-badge">Consensus</span><span className="as-chat-verdict-label">{verdict.label}</span></div>
+            {fragility && <div className={"as-chat-robust " + fragility.label}><span className="as-robust-dot"></span>Robustness: <b>{FRAGILITY_LABEL[fragility.label] || fragility.label}</b> · {fragility.robustness}/100{fragility.knifeEdge ? " · knife-edge" : ""}</div>}
+            {rationale && <div className="as-chat-verdict-why">{rationale}</div>}
+            {Array.isArray(conditions) && conditions.length > 0 && <ul className="as-chat-verdict-cond">{conditions.map((c, j) => <li key={j}>{c}</li>)}</ul>}
+          </div>}
+        <div ref={endRef} style={{
+        height: 1
+      }}></div>
       </div>
-      {rows}<div ref={endRef} style={{
-      height: 1
-    }}></div>
     </div>;
 }
 function ConfidenceBreakdown({
   breakdown,
   confidence,
+  rationale,
   label
 }) {
   const [open, setOpen] = React.useState(false);
-  const rows = (breakdown || []).filter(o => o && o.role !== "reporter" && typeof o.confidence === "number");
-  const hasData = rows.length > 0;
+  const RISK_LENS = /risk|critic|precedent|skeptic|threat|hidden|failure|downside|compliance/i;
+  const rows = (breakdown || []).filter(o => o && typeof o.confidence === "number");
+  const hasData = rows.length > 0 || !!rationale;
   const flagged = rows.reduce((n, o) => n + (o.flags ? o.flags.length : 0), 0);
+  const hasRisk = rows.some(o => RISK_LENS.test(o.lens || o.focus || ""));
   return <span className="as-conf-wrap">
-      <button className={"as-report-conf" + (hasData ? " click" : "")} onClick={() => hasData && setOpen(v => !v)} title={hasData ? "View confidence breakdown" : undefined}>
+      <button className={"as-report-conf" + (hasData ? " click" : "")} onClick={() => hasData && setOpen(v => !v)} title="Confidence = how sure the recommendation is (penalized for disagreement, flags, or offline fallback)">
         <DSIcon name="shield-check" size={13} />{confidence}% {label || "confidence"}
         {hasData && <svg className={"as-conf-caret" + (open ? " open" : "")} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>}
       </button>
       {open && hasData && <div className="as-conf-pop">
-          <div className="as-conf-note">Weighted average · Critic ×2{flagged ? ` · ${flagged} critic flag${flagged === 1 ? "" : "s"}` : ""}</div>
+          <div className="as-conf-note">Weighted average{hasRisk ? " · risk angle ×2" : ""}{flagged ? ` · ${flagged} flag${flagged === 1 ? "" : "s"}` : ""}</div>
+          {rows.length > 1 && <div className="as-conf-why">Lower than each agent because points are deducted for disagreement / verification flags / offline mode.</div>}
           {rows.map((o, i) => {
         const def = AS.AGENTS.find(a => a.id === o.agentId);
         const color = def ? AS.PROVIDERS[def.provider].color : "var(--ink-4)";
@@ -448,14 +579,15 @@ function ConfidenceBreakdown({
                 <span className="as-conf-dot" style={{
             background: color
           }}></span>
-                <span className="as-conf-name">{def ? def.name : o.name || o.role}</span>
-                {o.role === "critic" && <span className="as-conf-x2">×2</span>}
+                <span className="as-conf-name">{def ? def.name : o.name || o.agentId}</span>
+                {RISK_LENS.test(o.lens || o.focus || "") && <span className="as-conf-x2">×2</span>}
                 {o.stance && <span className={"as-turn-stance " + o.stance}>{STANCE_LABEL[o.stance] || o.stance}</span>}
                 <span className="as-grow"></span>
                 {delta !== 0 && <span className={"as-conf-delta " + (delta < 0 ? "down" : "up")}>{delta > 0 ? "+" : ""}{delta}</span>}
                 <span className="as-conf-pct">{o.confidence}%</span>
               </div>;
       })}
+          {rationale && <div className="as-conf-rationale">{rationale}</div>}
         </div>}
     </span>;
 }
@@ -604,7 +736,7 @@ const STAGES = [{
   label: "Work"
 }, {
   key: "review",
-  label: "Review"
+  label: "Synthesis"
 }, {
   key: "verify",
   label: "Fact-check"
@@ -698,17 +830,47 @@ function SteerBar({
       </div>
     </div>;
 }
+function downloadReport(mission) {
+  const r = mission.report || {};
+  const md = `# ${mission.title}\n\n${r.recommendation ? `**Recommendation:** ${r.recommendation}${r.confidence != null ? ` (confidence ${r.confidence}%)` : ""}\n\n` : ""}${r.markdown || ""}`;
+  const blob = new Blob([md], { type: "text/markdown" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `agentsphere-${(mission.title || "report").slice(0, 40).replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/^-+|-+$/g, "") || "report"}.md`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+const fmtElapsed = ms => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(s / 60);
+  return m ? `${m}m ${s % 60}s` : `${s}s`;
+};
 export function MissionDetail({
   mission,
   stream,
-  onSteer
+  onSteer,
+  onAssign,
+  onToast
 }) {
   const P = AS.STR.panel;
+  const running = !mission.done && !mission.failed && mission.phase !== "clarifying" && mission.phase !== "queued";
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [running]);
+  const elapsed = running && mission.startedAt ? fmtElapsed(now - mission.startedAt) : "";
+  const phaseN = mission.phaseIndex != null ? mission.phaseIndex + 1 : null;
+  const liveExtra = running ? `${mission.phase === "executing" && phaseN ? ` · Phase ${phaseN}` : ""}${elapsed ? ` · ${elapsed}` : ""}` : "";
   const statusColor = mission.failed ? "#DC2626" : mission.done ? "#1F8A48" : "#C77700";
   const subs = mission.subtasks || [];
   const subDone = subs.filter(s => s.status === "done").length;
   const subCounter = !mission.done && !mission.failed && subs.length ? ` · ${subDone}/${subs.length} subtasks` : "";
-  const statusText = (mission.failed ? P.missionFailed : mission.done ? AS.STR.misc.completed : mission.phase === "clarifying" ? P.waitingForYou : mission.phase === "event" ? P.eventRunning : mission.phase === "meeting" ? P.meeting + "…" : "Executing — orchestrated by the lead") + subCounter;
+  const statusText = (mission.failed ? P.missionFailed : mission.done ? AS.STR.misc.completed : mission.phase === "clarifying" ? P.waitingForYou : mission.phase === "queued" ? P.queuedAt + (mission.queued ? ` · ${P.queuePos} ${mission.queued}` : "") : mission.phase === "event" ? P.eventRunning : mission.phase === "meeting" ? P.meeting + "…" : "Executing — orchestrated by the lead") + subCounter + liveExtra;
   const meeting = mission.meeting;
   const [subAllOpen, setSubAllOpen] = React.useState(false);
   const [subSignal, setSubSignal] = React.useState(0);
@@ -774,19 +936,28 @@ export function MissionDetail({
           }}></i>
             {statusText}
           </span>
+          {mission.depth === "deep" && <span className="as-deep-badge">🔬 {P.deepBadge}</span>}
         </div>
       </div>
 
-      {!mission.failed && mission.stage != null && <StageTracker stage={mission.stage} hadDebate={mission.hadDebate} done={mission.done} paused={mission.phase === "event"} caption={mission.phase === "event" ? P.eventResume : null} />}
+      {mission.phase === "queued" && <div className="as-stage-cap" style={{
+      margin: "0 0 10px"
+    }}>{P.queued}</div>}
+      {mission.failed && onAssign && <button className="as-btn" style={{
+      margin: "2px 0 12px"
+    }} onClick={() => Promise.resolve(onAssign(mission.title)).then(() => onToast && onToast(AS.STR.toast.retried, "info")).catch(() => onToast && onToast(AS.STR.toast.assignFailed, "warn"))}>↻ {P.retry}</button>}
+
+      {!mission.failed && mission.phase !== "queued" && mission.stage != null && <StageTracker stage={mission.stage} hadDebate={mission.hadDebate} done={mission.done} paused={mission.phase === "event"} caption={mission.phase === "event" ? P.eventResume : null} />}
 
       {mission.done && jumpSections.length > 1 && <nav className="as-jumpbar" aria-label={P.jumpAria}>
-          {jumpSections.map(s => <button key={s.id} type="button" className={"as-chip click" + (activeSection === s.id ? " active" : "")} onClick={() => jumpTo(s.id)}>
+          <span className="as-jumpbar-label">Jump to</span>
+          {jumpSections.map(s => <button key={s.id} type="button" className={"as-jumplink" + (activeSection === s.id ? " active" : "")} onClick={() => jumpTo(s.id)}>
               {s.label}
             </button>)}
         </nav>}
 
       {mission.report && <div className="as-decision" id="as-sec-conclusion">
-          <span className="ttl"><DSIcon name="check-circle" size={14} />{P.answer}{meeting?.decision ? ` · ${meeting.decision}` : ""}</span>
+          <span className="ttl"><DSIcon name="check-circle" size={14} />{P.answer}{meeting?.decision ? ` · ${(VERDICT_META(meeting.decision) || {}).label || meeting.decision}` : ""}</span>
           <div className="body">{mission.report.recommendation}</div>
           <div style={{
         display: "flex",
@@ -795,16 +966,18 @@ export function MissionDetail({
         marginTop: 8,
         flexWrap: "wrap"
       }}>
-            <ConfidenceBreakdown breakdown={mission.report.breakdown} confidence={mission.report.confidence} />
+            <ConfidenceBreakdown breakdown={mission.report.breakdown} confidence={mission.report.confidence} rationale={mission.report.confidenceRationale} />
+            {mission.fragility && <RobustnessChip f={mission.fragility} />}
             {mission.simulated && <span className="as-sim-badge">{P.simBadge}</span>}
           </div>
           {meeting?.conditions?.length > 0 && <div className="conds">
               {meeting.conditions.map((c, i) => <span key={i} className="as-chip">{c}</span>)}
             </div>}
+          <OutcomeChips missionId={mission.id} initial={mission.outcome} />
         </div>}
 
       {!mission.report && meeting?.decision && <div className="as-decision">
-          <span className="ttl"><DSIcon name="check-circle" size={14} />{P.decision} · {meeting.decision}</span>
+          <span className="ttl"><DSIcon name="check-circle" size={14} />{P.decision} · {(VERDICT_META(meeting.decision) || {}).label || meeting.decision}</span>
           <div className="body">{meeting.rationale}</div>
           {meeting.conditions?.length > 0 && <div className="conds">
               {meeting.conditions.map((c, i) => <span key={i} className="as-chip">{c}</span>)}
@@ -823,8 +996,51 @@ export function MissionDetail({
           </div>
         </React.Fragment>}
 
+      {mission.scenarios && mission.scenarios.length > 0 && <div className="as-scenarios" id="as-sec-scenarios">
+          <span className="as-scenarios-ttl">🔬 {P.scenariosTitle}</span>
+          {mission.scenarios.map((s, i) => <div key={i} className="as-scenario-row">
+              <span className="as-scenario-name">{s.name}</span>
+              {s.probability != null && <span className="as-scenario-prob">{s.probability}%</span>}
+              <span className="as-scenario-out">{s.outcome}</span>
+            </div>)}
+          {mission.sensitivity && <div className="as-scenario-sens">{P.sensitivityLabel}: {mission.sensitivity}</div>}
+        </div>}
+
+      {(() => {
+      const phs = mission.phases && mission.phases.length ? mission.phases : null;
+      if (phs) {
+        const last = phs[phs.length - 1];
+        const concerns = (last.concerns || []).length;
+        return <div className={"as-quality" + (last.sufficient ? " ok" : "")} id="as-sec-quality">
+              <span className="as-quality-ttl">⟳ {P.phaseSynthesis} · {phs.length} {P.phaseWord}</span>
+              <span className="as-quality-sub">{last.summary || (last.sufficient ? P.qualitySufficient : "")}{concerns ? ` — ⚑ ${concerns} ${P.concernsLabel}` : ""}</span>
+            </div>;
+      }
+      if (mission.evaluations && mission.evaluations.length > 0) {
+        const evs = mission.evaluations;
+        const last = evs[evs.length - 1];
+        const passes = evs.length;
+        return <div className={"as-quality" + (last.sufficient ? " ok" : "")} id="as-sec-quality">
+              <span className="as-quality-ttl">⟳ {P.qualityCheck}{last.score != null ? ` · ${last.score}/100` : ""}{passes > 1 ? ` · ${passes} ${P.qualityPass}` : ""}</span>
+              <span className="as-quality-sub">{last.sufficient ? P.qualitySufficient : last.reason || ""}{passes > 1 ? ` — ${P.qualityRefined}` : ""}</span>
+            </div>;
+      }
+      return null;
+    })()}
+
       {mission.report && <React.Fragment>
-          <div className="as-eyebrow" id="as-sec-report">{P.report}</div>
+          <div className="as-eyebrow as-eyebrow-row" id="as-sec-report">
+            <span>{P.report}</span>
+            <span className="as-row" style={{
+          gap: 6
+        }}>
+              <button className="as-eyebrow-act" onClick={() => Promise.resolve(navigator.clipboard && navigator.clipboard.writeText(mission.report.markdown || "")).then(() => onToast && onToast(AS.STR.toast.reportCopied, "ok")).catch(() => onToast && onToast(AS.STR.toast.assignFailed, "warn"))}>{P.copyReport}</button>
+              <button className="as-eyebrow-act" onClick={() => {
+            downloadReport(mission);
+            onToast && onToast(AS.STR.toast.reportDownloaded, "ok");
+          }}>{P.downloadReport}</button>
+            </span>
+          </div>
           <div className="as-card">
             {stream ? <StreamingMarkdown text={mission.report.markdown} /> : <Markdown text={mission.report.markdown} />}
           </div>
@@ -873,12 +1089,12 @@ export function MissionDetail({
               {P.meetingNote}
             </p>
             {onSteer && mission.phase === "meeting" && !mission.done && <SteerBar onSteer={onSteer} />}
-            <MeetingTranscript turns={meeting.turns} live={!mission.done} decision={meeting.decision} />
+            <MeetingTranscript turns={meeting.turns} live={!mission.done} decision={meeting.decision} rationale={meeting.rationale} conditions={meeting.conditions} fragility={meeting.fragility} />
           </div>
         </React.Fragment>}
     </div>;
 }
-const everyLabel = m => m >= 1440 ? `mỗi ${Math.round(m / 1440)} ngày` : m >= 60 ? `mỗi ${Math.round(m / 60)} giờ` : `mỗi ${m} phút`;
+const everyLabel = m => m >= 1440 ? `every ${Math.round(m / 1440)}d` : m >= 60 ? `every ${Math.round(m / 60)}h` : `every ${m}m`;
 function StandingMissions() {
   const [list, setList] = React.useState([]);
   const [title, setTitle] = React.useState("");
@@ -911,32 +1127,32 @@ function StandingMissions() {
   };
   return <div style={{ marginBottom: 6 }}>
       <div className="as-eyebrow as-standing-head" onClick={() => setOpen(v => !v)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-        <DSIcon name="clock" size={12} />Nhiệm vụ định kỳ{list.length ? ` · ${list.length}` : ""}
+        <DSIcon name="clock" size={12} />Standing missions{list.length ? ` · ${list.length}` : ""}
         <span className="as-grow"></span>
         <svg className={"as-conf-caret" + (open ? " open" : "")} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
       </div>
       {open && <div className="as-card">
           <p style={{ font: "400 12px/1.5 var(--font-body)", color: "var(--ink-3)", margin: "0 0 8px" }}>
-            Squad tự chạy theo lịch (kể cả khi bạn offline); kết quả tự gửi vào Inbox.
+            The squad runs these on a schedule (even when you're offline); results land in the Inbox.
           </p>
-          <input className="as-input" value={title} placeholder="vd: Quét tin M&A fintech VN tuần này" onChange={e => setTitle(e.target.value)} onKeyDown={e => e.key === "Enter" && add()} />
+          <input className="as-input" value={title} placeholder="e.g. Scan VN fintech M&A news this week" onChange={e => setTitle(e.target.value)} onKeyDown={e => e.key === "Enter" && add()} />
           <div className="as-row" style={{ gap: 8, marginTop: 8 }}>
             <select className="as-select as-grow" value={every} onChange={e => setEvery(Number(e.target.value))}>
-              <option value={10}>Mỗi 10 phút (demo)</option>
-              <option value={60}>Mỗi giờ</option>
-              <option value={360}>Mỗi 6 giờ</option>
-              <option value={1440}>Mỗi 24 giờ</option>
+              <option value={10}>Every 10 min (demo)</option>
+              <option value={60}>Every hour</option>
+              <option value={360}>Every 6 hours</option>
+              <option value={1440}>Every 24 hours</option>
             </select>
-            <button className="as-btn primary" disabled={!title.trim()} onClick={add} style={{ padding: "9px 14px" }}>Thêm</button>
+            <button className="as-btn primary" disabled={!title.trim()} onClick={add} style={{ padding: "9px 14px" }}>Add</button>
           </div>
           {list.map(s => <div key={s.id} className="as-row" style={{ marginTop: 10, alignItems: "center", gap: 8 }}>
               <span className={"as-incident-dot" + (s.enabled ? "" : "")} style={{ width: 8, height: 8, borderRadius: "50%", flex: "none", background: s.enabled ? "var(--gn-vivid-bot)" : "var(--ink-5)" }}></span>
               <div className="as-col as-grow" style={{ minWidth: 0 }}>
                 <span style={{ font: "500 12.5px var(--font-body)", color: s.enabled ? "var(--ink)" : "var(--ink-4)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</span>
-                <span style={{ font: "500 10.5px var(--font-mono)", color: "var(--ink-4)" }}>{everyLabel(s.schedule?.everyMinutes || 1440)}{s.lastRunAt ? ` · chạy lần cuối ${fmtTime(s.lastRunAt)}` : " · chưa chạy"}</span>
+                <span style={{ font: "500 10.5px var(--font-mono)", color: "var(--ink-4)" }}>{everyLabel(s.schedule?.everyMinutes || 1440)}{s.lastRunAt ? ` · last run ${fmtTime(s.lastRunAt)}` : " · not run yet"}</span>
               </div>
-              <button className="as-icon-btn" title={s.enabled ? "Tạm dừng" : "Bật"} onClick={() => toggle(s)}>{s.enabled ? "⏸" : "▶"}</button>
-              <button className="as-icon-btn" title="Xoá" onClick={() => del(s.id)}><DSIcon name="x" size={13} /></button>
+              <button className="as-icon-btn" title={s.enabled ? "Pause" : "Enable"} onClick={() => toggle(s)}>{s.enabled ? "⏸" : "▶"}</button>
+              <button className="as-icon-btn" title="Delete" onClick={() => del(s.id)}><DSIcon name="x" size={13} /></button>
             </div>)}
         </div>}
     </div>;
@@ -944,6 +1160,7 @@ function StandingMissions() {
 export function TasksPanel({
   liveMission,
   onClose,
+  onCompose,
   autoOpenId
 }) {
   const P = AS.STR.panel;
@@ -979,13 +1196,10 @@ export function TasksPanel({
           });
           return ev;
         })(),
+        phases: (m.phases || []).map(p => ({ index: p.index, goal: p.goal, summary: p.synthesis?.phaseSummary || "", sufficient: !!p.synthesis?.sufficient, concerns: p.synthesis?.concerns || [] })),
         subtasks: (() => {
-          const byRole = {};
-          (m.outputs || []).forEach(o => {
-            if (o.role) byRole[o.role] = o;
-          });
           return (m.subtasks || []).map(s => {
-            const o = byRole[s.role];
+            const o = (m.outputs || []).find(x => x.agentId === s.agentId && (x.focus === s.title || x.phase === s.phase));
             return o ? {
               ...s,
               summary: o.summary,
@@ -1003,7 +1217,7 @@ export function TasksPanel({
         } : null,
         report: m.report ? {
           ...m.report,
-          breakdown: (m.outputs || []).filter(o => o.role !== "reporter")
+          breakdown: (m.outputs || [])
         } : null
       });
     } catch {}
@@ -1018,14 +1232,7 @@ export function TasksPanel({
       <div className="as-panel-body">
         {detail ? <MissionDetail mission={detail} /> : <React.Fragment>
             <StandingMissions />
-            {list && list.length === 0 && <div style={{
-          padding: "20px 8px",
-          textAlign: "center",
-          font: "400 13px var(--font-body)",
-          color: "var(--ink-4)"
-        }}>
-                {P.noTasks}
-              </div>}
+            {list && list.length === 0 && <EmptyState emoji="📋" title="No missions yet" line="Assign a question or decision — the squad researches, debates, and returns one recommendation." cta="Create your first mission" onCta={onCompose} />}
             {(list || []).map(t => <div key={t.id} className="as-card click" onClick={() => open(t.id)}>
                 <div className="as-row" style={{
             alignItems: "flex-start"
@@ -1045,7 +1252,7 @@ export function TasksPanel({
             alignItems: "flex-end",
             gap: 4
           }}>
-                    <span className={"as-task-status " + t.status}>{t.status}</span>
+                    <span className={"as-task-status " + t.status}>{MISSION_STATUS_LABEL[t.status] || t.status}</span>
                     <span className="as-task-time">{fmtTime(t.createdAt)}</span>
                   </div>
                 </div>
@@ -1058,7 +1265,8 @@ export function InboxPanel({
   briefings = [],
   onClose,
   onOpenMission,
-  onMarkAllRead
+  onMarkAllRead,
+  onCompose
 }) {
   React.useEffect(() => {
     if (briefings.some(b => !b.read)) onMarkAllRead && onMarkAllRead();
@@ -1073,18 +1281,11 @@ export function InboxPanel({
   const icon = b => b.kind === "failed" ? "✗" : b.severity === "warn" ? "⚑" : "✓";
   return <GlassPanel side="right" label="Inbox">
       <div className="as-panel-head">
-        <span className="as-panel-title">Báo cáo từ squad</span>
+        <span className="as-panel-title">Reports from the squad</span>
         <button className="as-icon-btn" onClick={onClose} aria-label="close"><DSIcon name="x" size={15} /></button>
       </div>
       <div className="as-panel-body" aria-live="polite">
-        {briefings.length === 0 && <div style={{
-        padding: "26px 8px",
-        textAlign: "center",
-        font: "400 13px var(--font-body)",
-        color: "var(--ink-4)"
-      }}>
-            Chưa có báo cáo — squad sẽ tự gửi tóm tắt vào đây sau mỗi nhiệm vụ.
-          </div>}
+        {briefings.length === 0 && <EmptyState emoji="📨" title="No reports yet" line="The squad will post a summary here after each mission." cta="Create a mission to get a report" onCta={onCompose} />}
         {briefings.map(b => <div key={b.id} className={"as-card click as-brief" + (b.read ? "" : " unread")} onClick={() => onOpenMission && b.missionId && onOpenMission(b.missionId)}>
             <div className="as-row" style={{
           alignItems: "flex-start"
@@ -1112,10 +1313,12 @@ export function MissionPanel({
   onComposeChange,
   onClose,
   onAssign,
+  onToast,
   onSteer
 }) {
   const [draft, setDraft] = React.useState("");
   const [err, setErr] = React.useState("");
+  const [deep, setDeep] = React.useState(false);
   const [clarify, setClarify] = React.useState("");
   const [wide, toggleWide] = useWide();
   const [seenHelp, setSeenHelp] = React.useState(() => {
@@ -1167,7 +1370,7 @@ export function MissionPanel({
     if (!t) return;
     setErr("");
     try {
-      await onAssign(t);
+      await onAssign(t, deep ? "deep" : "quick");
       setDraft("");
       onComposeChange && onComposeChange(false);
     } catch (e) {
@@ -1228,6 +1431,9 @@ export function MissionPanel({
               {mission && <button className="as-btn ghost" onClick={() => onComposeChange && onComposeChange(false)}>
                   {P.lastResult}
                 </button>}
+              <button type="button" className={"as-deep-toggle" + (deep ? " on" : "")} title={P.deepDiveHint} aria-pressed={deep} onClick={() => setDeep(v => !v)}>
+                <span className="as-deep-dot"></span>🔬 {P.deepDive}
+              </button>
               <button className="as-btn primary" disabled={!draft.trim()} onClick={assign}>
                 {P.missionGo}
               </button>
@@ -1270,7 +1476,7 @@ export function MissionPanel({
                   </button>
                 </div>
               </div>}
-            <MissionDetail mission={mission} stream onSteer={onSteer ? text => onSteer(mission.id, text) : null} />
+            <MissionDetail mission={mission} stream onSteer={onSteer ? text => onSteer(mission.id, text) : null} onAssign={onAssign} onToast={onToast} />
             {mission.done && <button className="as-btn primary" style={{
           width: "100%",
           justifyContent: "center",
@@ -1295,8 +1501,10 @@ export function VerdictReveal({
   if (!verdict) return null;
   const d = verdict.decision;
   const positive = !d || !/do-not-proceed/i.test(d);
+  const DEC_LABEL = { proceed: "Proceed", "do-not-proceed": "Do not proceed", "proceed-with-conditions": "Proceed with conditions", informational: "Informational", event: "Event" };
   return <div className="as-verdict-backdrop" onClick={onDismiss}>
       <div className={"as-verdict-card " + (positive ? "ok" : "hold")} onClick={e => e.stopPropagation()} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+        <button className="as-verdict-close" onClick={onDismiss} aria-label={AS.STR.panel.close}><DSIcon name="x" size={15} /></button>
         <div className="as-verdict-ring" style={{
         "--vp-target": verdict.confidence
       }}>
@@ -1305,10 +1513,10 @@ export function VerdictReveal({
             <span className="as-verdict-lbl">confidence</span>
           </div>
         </div>
-        {d && <span className={"as-verdict-stamp " + (positive ? "ok" : "hold")}>{d}</span>}
+        {d && <span className={"as-verdict-stamp " + (positive ? "ok" : "hold")}>{DEC_LABEL[d] || d}</span>}
         <div className="as-verdict-rec">{verdict.recommendation}</div>
         <button className="as-btn primary as-verdict-cta" onClick={onDismiss}>
-          Xem đầy đủ<span>báo cáo · nguồn · phản biện</span>
+          View full report<span>report · sources · debate</span>
         </button>
       </div>
     </div>;

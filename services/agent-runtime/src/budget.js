@@ -27,6 +27,8 @@ export const MODEL_LIMITS = {
   "gemini/gemini-2.5-flash": { context: 131072, maxOutput: 8192 },
   "gemini/gemini-2.5-flash-lite": { context: 131072, maxOutput: 8192 },
   "gemini/gemini-3.1-pro-preview": { context: 131072, maxOutput: 16384, reasoning: true },
+  "gemini/gemini-3.1-flash-lite": { context: 131072, maxOutput: 8192 },
+  "gemini/gemini-3-flash-preview": { context: 131072, maxOutput: 8192 },
   "bytedance/seed-1-6-250915": { context: 131072, maxOutput: 8192 },
   "bytedance/seed-1-6-flash-250715": { context: 131072, maxOutput: 8192 }
 };
@@ -77,7 +79,7 @@ export function budgetFor(models, task) {
     temperature: pool.reasoning || task === "meeting" ? 0.6 : 0.7,
     toolRounds: pool.context <= 16384 ? 2 : 4,
     toolCallsPerRound: 5,
-    toolResultChars: Math.max(800, Math.min(6000, Math.floor(input * CHARS_PER_TOKEN / (2 * 5 + 3))))
+    toolResultChars: Math.max(800, Math.min(14000, Math.floor(input * CHARS_PER_TOKEN / (2 * 5 + 3))))
   };
 }
 
@@ -109,7 +111,7 @@ export function clampRunOutput(parsed) {
     stance: RUN_STANCES.includes(parsed.stance) ? parsed.stance : "conditional",
     say: clip(parsed.say, 120),
     summary: clip(parsed.summary, 700),
-    keyPoints: (parsed.keyPoints || []).slice(0, 5).map(k => clip(k, 90)),
+    keyPoints: (parsed.keyPoints || []).slice(0, 5).map(k => clip(k, 240)),
     insufficientReason: parsed.insufficientReason ? clip(parsed.insufficientReason, 140) : undefined,
     confidence: Math.max(0, Math.min(100, Number(parsed.confidence) || 70))
   };

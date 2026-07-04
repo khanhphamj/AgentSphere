@@ -22,7 +22,22 @@ CREATE TABLE IF NOT EXISTS standing_missions (
   id TEXT PRIMARY KEY,
   data JSONB NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-)`;
+);
+CREATE TABLE IF NOT EXISTS calibration_events (
+  id TEXT PRIMARY KEY,
+  mission_id TEXT NOT NULL,
+  data JSONB NOT NULL,
+  outcome TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS mission_events (
+  mission_id TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  data JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (mission_id, seq)
+);
+CREATE INDEX IF NOT EXISTS mission_events_mid ON mission_events (mission_id, seq)`;
 
 let pool = null;
 let ready = null;
@@ -50,6 +65,7 @@ function init() {
   return ready;
 }
 
+const pgJson = v => JSON.stringify(v).replace(/\\u0000/g, "");
 export const missionStore = {
   async loadAll() {
     if (!(await init())) return [];
@@ -65,10 +81,44 @@ export const missionStore = {
     try {
       await pool.query(
         "INSERT INTO missions (id, data, updated_at) VALUES ($1, $2, now()) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()",
-        [mission.id, JSON.stringify(mission)]
+        [mission.id, pgJson(mission)]
       );
     } catch (err) {
       console.warn(`[orchestrator] mission save failed (${err.message})`);
+    }
+  },
+  async setField(id, key, value) {
+    if (!(await init())) return;
+    try {
+      await pool.query(
+        "UPDATE missions SET data = jsonb_set(data, $2, $3::jsonb), updated_at = now() WHERE id = $1",
+        [id, `{${key}}`, pgJson(value)]
+      );
+    } catch (err) {
+      console.warn(`[orchestrator] mission setField failed (${err.message})`);
+    }
+  }
+};
+
+export const eventStore = {
+  async add(ev) {
+    if (!(await init())) return;
+    try {
+      await pool.query(
+        "INSERT INTO mission_events (mission_id, seq, data) VALUES ($1, $2, $3) ON CONFLICT (mission_id, seq) DO NOTHING",
+        [ev.missionId, ev.seq, pgJson(ev)]
+      );
+    } catch (err) {
+      console.warn(`[orchestrator] event persist failed (${err.message})`);
+    }
+  },
+  async list(missionId) {
+    if (!missionId || !(await init())) return [];
+    try {
+      return (await pool.query("SELECT data FROM mission_events WHERE mission_id = $1 ORDER BY seq", [missionId])).rows.map(r => r.data);
+    } catch (err) {
+      console.warn(`[orchestrator] event list failed (${err.message})`);
+      return [];
     }
   }
 };
@@ -105,23 +155,58 @@ export const briefingStore = {
   }
 };
 
-export const configStore = {
-  async loadSquad() {
-    if (!(await init())) return null;
+export const calibrationStore = {
+  async add(events) {
+    if (!events?.length || !(await init())) return;
     try {
-      const r = await pool.query("SELECT data FROM org_config WHERE id = 'squad'");
-      return r.rows[0]?.data || null;
+      for (const e of events) {
+        const { id, missionId, ...data } = e;
+        await pool.query(
+          "INSERT INTO calibration_events (id, mission_id, data) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
+          [id, missionId, JSON.stringify(data)]
+        );
+      }
     } catch (err) {
-      console.warn(`[orchestrator] squad load failed (${err.message})`);
-      return null;
+      console.warn(`[orchestrator] calibration add failed (${err.message})`);
     }
   },
-  async saveSquad(squad) {
+  async setOutcome(missionId, userEmail, value) {
+    if (!(await init())) return;
+    try {
+      await pool.query("UPDATE calibration_events SET outcome = $1 WHERE mission_id = $2 AND data->>'userEmail' = $3", [value, missionId, userEmail || ""]);
+    } catch (err) {
+      console.warn(`[orchestrator] calibration setOutcome failed (${err.message})`);
+    }
+  },
+  async list(userEmail, limit = 2000) {
+    if (!(await init())) return [];
+    try {
+      const r = await pool.query("SELECT data, outcome, mission_id FROM calibration_events WHERE data->>'userEmail' = $1 ORDER BY created_at DESC LIMIT $2", [userEmail || "", limit]);
+      return r.rows.map(x => ({ ...x.data, outcome: x.outcome, missionId: x.mission_id }));
+    } catch (err) {
+      console.warn(`[orchestrator] calibration list failed (${err.message})`);
+      return [];
+    }
+  }
+};
+
+export const configStore = {
+  async loadAllSquads() {
+    if (!(await init())) return [];
+    try {
+      const r = await pool.query("SELECT id, data FROM org_config WHERE id LIKE 'squad:%'");
+      return r.rows.map(row => ({ email: row.id.slice("squad:".length), squad: row.data }));
+    } catch (err) {
+      console.warn(`[orchestrator] squad load failed (${err.message})`);
+      return [];
+    }
+  },
+  async saveSquad(email, squad) {
     if (!(await init())) return;
     try {
       await pool.query(
-        "INSERT INTO org_config (id, data, updated_at) VALUES ('squad', $1, now()) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()",
-        [JSON.stringify(squad)]
+        "INSERT INTO org_config (id, data, updated_at) VALUES ($1, $2, now()) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()",
+        [`squad:${(email || "").toLowerCase().trim()}`, JSON.stringify(squad)]
       );
     } catch (err) {
       console.warn(`[orchestrator] squad save failed (${err.message})`);
@@ -148,6 +233,22 @@ export const standingStore = {
       );
     } catch (err) {
       console.warn(`[orchestrator] standing save failed (${err.message})`);
+    }
+  },
+  async patchFields(id, fields) {
+    if (!(await init())) return;
+    try {
+      const entries = Object.entries(fields);
+      if (!entries.length) return;
+      let expr = "data";
+      const params = [id];
+      entries.forEach(([k, v], i) => {
+        expr = `jsonb_set(${expr}, $${params.length + 1}, $${params.length + 2}::jsonb)`;
+        params.push(`{${k}}`, JSON.stringify(v));
+      });
+      await pool.query(`UPDATE standing_missions SET data = ${expr}, updated_at = now() WHERE id = $1`, params);
+    } catch (err) {
+      console.warn(`[orchestrator] standing patchFields failed (${err.message})`);
     }
   },
   async remove(id) {

@@ -1,28 +1,63 @@
 import { emit } from "./events.js";
-import { getSquad, byRole } from "./squad.js";
-import { briefingStore } from "./db.js";
+import { getSquadFor, leadOf, poolOf } from "./squad.js";
+import { briefingStore, calibrationStore, missionStore } from "./db.js";
 const RUNTIME_URL = (process.env.AGENT_RUNTIME_URL || "http://localhost:8082").replace(/\/$/, "");
+const SELF_URL = (process.env.ORCHESTRATOR_SELF_URL || "http://localhost:8081").replace(/\/$/, "");
 const CLIENT_ID = process.env.CLIENT_ID || "";
 const CLIENT_SECRET = process.env.CLIENT_SECRET || "";
+const MAX_PHASES = Math.max(1, Number(process.env.MAX_PHASES || 3));
+const INTERAGENT_BUS = process.env.INTERAGENT_BUS === "on";
 const HEADERS = {
   "content-type": "application/json",
   "x-client-id": CLIENT_ID,
   "x-client-secret": CLIENT_SECRET
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const pace = (m, ms) => sleep(m && m.auto ? 0 : ms);
-async function runtime(path, body) {
+const TOPIC_MAP = [
+  [/hir|tuyển|nhân sự|layoff|sa thải/i, "hiring"],
+  [/invest|đầu tư|cổ phiếu|stock|fund|tài chính|finance|budget|ngân sách/i, "finance"],
+  [/market|thị trường|launch|ra mắt|product|sản phẩm|pricing|giá/i, "product/market"],
+  [/tech|công nghệ|migrat|stack|infra|model|nền tảng/i, "technology"],
+  [/partner|hợp tác|acqui|merg|sáp nhập/i, "partnership"],
+  [/legal|pháp lý|complian|risk|rủi ro|policy/i, "risk/legal"]
+];
+const topicOf = title => {
+  const t = String(title || "");
+  for (const [re, name] of TOPIC_MAP) if (re.test(t)) return name;
+  return "general";
+};
+const fragilityOf = stances => {
+  const s = (stances || []).filter(o => o && o.stance);
+  const S = s.filter(o => o.stance === "support").length;
+  const O = s.filter(o => o.stance === "oppose").length;
+  const C = s.filter(o => o.stance === "conditional").length;
+  const V = S + O + C;
+  if (V < 1) return null;
+  const sorted = [S, O, C].sort((a, b) => b - a);
+  const margin = (sorted[0] - sorted[1]) / V;
+  const robustness = Math.round(100 * (0.5 + margin / 2));
+  return {
+    robustness,
+    label: robustness >= 75 ? "solid" : robustness >= 60 ? "moderate" : "brittle",
+    knifeEdge: V >= 2 && sorted[0] - sorted[1] <= 1,
+    split: { support: S, oppose: O, conditional: C }
+  };
+};
+const pace = (m, ms) => sleep(m && m.auto ? 0 : Math.round(ms * 0.55));
+const firstSentence = s => String(s || "").split(/(?<=[.!?。])\s/)[0].slice(0, 200);
+async function runtime(path, body, signal, userEmail) {
+  const timeout = AbortSignal.timeout(360_000);
   const res = await fetch(`${RUNTIME_URL}${path}`, {
     method: "POST",
-    headers: HEADERS,
+    headers: userEmail ? { ...HEADERS, "x-user-email": userEmail } : HEADERS,
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(180_000)
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout
   });
   if (!res.ok) throw new Error(`${path} → ${res.status}: ${(await res.text()).slice(0, 200)}`);
   return res.json();
 }
 const detectLanguage = text => /[àáảãạăâđèéẻẽẹêìíỉĩịòóỏõọôơùúủũụưỳýỷỹỵ]/i.test(text) ? "vi" : "en";
-const STATUS_TITLE = /agent unresponsive|unusable format|revive to reload|reload its checkpoint|bring the agent back online|model unreachable|model answered in an|denied by policy|superseded by a new mission|all specialists failed|✗|⚑|model 404|429 too many/i;
+const STATUS_TITLE = /agent unresponsive|unusable format|revive to reload|reload its checkpoint|bring the agent back online|model unreachable|model answered in an|denied by policy|superseded by a new mission|all specialists failed|all workers failed|✗|⚑|model 404|429 too many/i;
 export function isStatusTitle(title) {
   const t = String(title || "").trim();
   if (!t) return true;
@@ -38,381 +73,338 @@ export function createMission(title) {
     createdAt: Date.now(),
     subtasks: [],
     outputs: [],
+    phases: [],
+    blackboard: [],
+    mailbox: [],
+    board: [],
+    agentRuns: [],
     steers: [],
     meeting: null,
     report: null
   };
 }
-export async function runMission(mission) {
+const pick = (obj, keys) => Object.fromEntries(keys.filter(k => k in obj).map(k => [k, obj[k]]));
+
+export async function runMission(mission, { signal } = {}) {
   const m = mission;
-  const lead = byRole("orchestrator");
-  try {
-    emit(m.id, "mission.created", {
-      title: m.title,
-      language: m.language,
-      squad: getSquad()
+  const squad = Array.isArray(m.squad) && m.squad.length ? m.squad : getSquadFor(m.userEmail);
+  const rt = (path, body) => runtime(path, body, signal, m.userEmail);
+  const lead = leadOf(squad);
+  const pool = poolOf(squad);
+  const vi = m.language === "vi";
+  const agentById = id => squad.find(a => a.id === id) || lead;
+  m.subtasks = m.subtasks || [];
+  m.outputs = m.outputs || [];
+  m.phases = m.phases || [];
+  m.blackboard = m.blackboard || [];
+  m.mailbox = m.mailbox || [];
+  m.board = m.board || [];
+  let nextSub = 0;
+  const pushBlackboard = (outputs, synthesis) => {
+    for (const o of outputs) if (o.summary) m.blackboard.push(`${o.name} — ${o.focus}: ${firstSentence(o.summary)}`);
+    if (synthesis?.phaseSummary) m.blackboard.push(`${vi ? "Tổng hợp của lead" : "Lead synthesis"}: ${synthesis.phaseSummary}`);
+    m.blackboard = m.blackboard.slice(-14);
+  };
+  const emitTools = (agentId, out) => {
+    for (const tc of out.toolCalls || []) emit(m.id, "agent.tool", {
+      agentId,
+      server: tc.server,
+      tool: tc.tool,
+      allowed: tc.allowed,
+      reason: tc.reason || null,
+      result: tc.result || null,
+      args: tc.args || null
     });
-    const planP = runtime("/plan", {
+  };
+  try {
+    emit(m.id, "mission.created", { title: m.title, language: m.language, squad });
+    const planP = rt("/plan", {
       title: m.title,
       context: m.clarifyAnswer || "",
       language: m.language,
       model: lead.models || lead.model
     });
     await pace(m, 800);
-    emit(m.id, "phase.gather", {
-      place: "meeting"
-    });
-    const [plan] = await Promise.all([planP, pace(m, 9000)]);
+    emit(m.id, "phase.gather", { place: "meeting" });
+    const [plan] = await Promise.all([planP, pace(m, 5000)]);
     if (plan.assessment?.type === "unclear" && !m.clarifyAnswer && !m.auto) {
       m.status = "clarifying";
       m.clarifyQuestion = plan.assessment.question;
-      emit(m.id, "mission.clarify", {
-        agentId: lead.id,
-        question: plan.assessment.question
-      });
+      emit(m.id, "mission.clarify", { agentId: lead.id, question: plan.assessment.question });
       emit(m.id, "phase.disperse", {});
       return;
     }
     if (m.auto && plan.assessment?.type === "unclear") m.clarifyAnswer = m.clarifyAnswer || "Automated scheduled run — proceed with your best interpretation of the standing brief.";
     if (plan.assessment?.type === "event") {
-      return await runEvent(m, plan.assessment);
+      return await runEvent(m, plan.assessment, signal);
     }
-    emit(m.id, "agent.say", {
-      agentId: lead.id,
-      say: plan.announce,
-      tone: null
-    });
-    await pace(m, 3200);
-    m.subtasks = plan.subtasks.map((s, i) => {
-      const agent = byRole(s.role) || byRole("research");
-      return {
-        id: i,
-        role: s.role,
-        agentId: agent.id,
-        title: s.title,
-        status: "todo"
-      };
-    });
     m.assessment = plan.assessment || null;
-    m.status = "executing";
-    emit(m.id, "mission.plan", {
-      subtasks: m.subtasks,
-      assessment: m.assessment
-    });
+    const informational = !!m.assessment?.informational;
+    const complexity = m.assessment?.complexity || "standard";
+    emit(m.id, "agent.say", { agentId: lead.id, say: plan.approach || (vi ? "Bắt đầu nhé." : "Let's begin."), tone: null });
     await pace(m, 2600);
-    emit(m.id, "phase.disperse", {});
-    await pace(m, 2500);
-    const working = m.subtasks.filter(s => s.role !== "reporter").map(s => s.role);
-    const results = {};
-    await Promise.all(working.map(async (role, i) => {
-      const agent = byRole(role);
-      const sub = m.subtasks.find(s => s.role === role);
-      let workerAgent = agent;
-      let takenOver = false;
-      await pace(m, 1200 + i * 2300);
-      sub.status = "doing";
-      emit(m.id, "agent.progress", {
-        agentId: agent.id,
-        sub: sub.id,
-        status: "doing",
-        title: sub.title
-      });
-      let out = await runtime("/run", {
+    m.status = "executing";
+
+    const runWorker = async (sub, stage, blackboard, peerDrafts) => {
+      const agent = agentById(sub.agentId);
+      let inbox = [];
+      if (INTERAGENT_BUS) {
+        inbox = (m.mailbox || []).filter(msg => msg.to === agent.id && !msg.read).map(msg => ({ from: msg.from, body: msg.body }));
+        for (const msg of m.mailbox || []) if (msg.to === agent.id && !msg.read) msg.read = true;
+      }
+      const base = {
         missionId: m.id,
-        role,
+        role: "worker",
         agent,
-        subtask: {
-          id: sub.id,
-          title: sub.title
-        },
+        agentId: agent.id,
+        assignment: { focus: sub.title, lens: sub.lens },
         missionTitle: m.title,
-        context: m.clarifyAnswer ? `The user clarified: ${m.clarifyAnswer}` : "",
-        complexity: m.assessment?.complexity || "standard",
-        informational: !!m.assessment?.informational,
+        complexity,
+        informational,
         userEmail: m.userEmail || null,
-        language: m.language
-      });
-      if (out.questionForLead) {
-        emit(m.id, "agent.question", {
-          agentId: agent.id,
-          leadId: lead.id,
-          question: out.questionForLead
-        });
-        await pace(m, 5000);
-        const guidance = await runtime("/lead-answer", {
-          agent: lead,
-          missionTitle: m.title,
-          question: out.questionForLead,
-          language: m.language
-        });
-        emit(m.id, "agent.answer", {
-          agentId: lead.id,
-          to: agent.id,
-          answer: guidance.answer
-        });
-        await pace(m, 3000);
-        out = await runtime("/run", {
-          missionId: m.id,
-          role,
-          agent,
-          subtask: {
-            id: sub.id,
-            title: sub.title
-          },
-          missionTitle: m.title,
-          context: `${m.clarifyAnswer ? `The user clarified: ${m.clarifyAnswer}\n` : ""}Lead's guidance for your question "${out.questionForLead}": ${guidance.answer}`,
-          complexity: m.assessment?.complexity || "standard",
-        informational: !!m.assessment?.informational,
-          userEmail: m.userEmail || null,
-          language: m.language
-        });
-      }
-      results[role] = out;
-      for (const tc of out.toolCalls || []) {
-        emit(m.id, "agent.tool", {
-          agentId: agent.id,
-          server: tc.server,
-          tool: tc.tool,
-          allowed: tc.allowed,
-          reason: tc.reason || null,
-          result: tc.result || null,
-          args: tc.args || null
-        });
-        await pace(m, 700);
-      }
-      if (out.failed) {
-        const vi = m.language === "vi";
-        emit(m.id, "agent.progress", {
-          agentId: agent.id,
-          sub: sub.id,
-          status: "failed",
-          error: out.error || "model unreachable"
-        });
-        emit(m.id, "agent.takeover", {
-          agentId: lead.id,
-          from: agent.id,
-          sub: sub.id,
-          role,
-          reason: out.error || "model unreachable"
-        });
-        emit(m.id, "agent.say", {
-          agentId: lead.id,
-          say: vi
-            ? `${agent.name} gặp sự cố (${out.error || "model lỗi"}) — để tôi tiếp quản phần việc ${role} này.`
-            : `${agent.name} hit an error (${out.error || "model failure"}) — I'll take over this ${role} task.`
-        });
+        language: m.language,
+        ...(INTERAGENT_BUS ? { busUrl: `${SELF_URL}/missions/${m.id}/bus`, roster: squad.map(a => ({ id: a.id, name: a.name })), inbox } : {})
+      };
+      let out = await rt("/run", { ...base, stage, blackboard, peerDrafts, context: m.clarifyAnswer ? `${vi ? "Người dùng làm rõ" : "The user clarified"}: ${m.clarifyAnswer}` : "" });
+      if (stage === "draft" && out.questionForLead) {
+        emit(m.id, "agent.question", { agentId: agent.id, leadId: lead.id, question: out.questionForLead });
+        await pace(m, 4000);
+        const guidance = await rt("/lead-answer", { agent: lead, missionTitle: m.title, question: out.questionForLead, language: m.language });
+        emit(m.id, "agent.answer", { agentId: lead.id, to: agent.id, answer: guidance.answer });
         await pace(m, 2500);
-        sub.status = "doing";
-        emit(m.id, "agent.progress", {
-          agentId: lead.id,
-          sub: sub.id,
-          status: "doing",
-          title: sub.title,
-          takeover: { from: agent.id, fromName: agent.name }
-        });
+        out = await rt("/run", { ...base, stage, blackboard, context: `${m.clarifyAnswer ? `${vi ? "Người dùng làm rõ" : "The user clarified"}: ${m.clarifyAnswer}\n` : ""}${vi ? "Lead hướng dẫn" : "Lead's guidance"} ("${out.questionForLead}"): ${guidance.answer}` });
+      }
+      emitTools(agent.id, out);
+      if (stage === "draft" && out.failed) {
+        emit(m.id, "agent.progress", { agentId: agent.id, sub: sub.id, status: "failed", error: out.error || "model unreachable" });
+        emit(m.id, "agent.takeover", { agentId: lead.id, from: agent.id, sub: sub.id, reason: out.error || "model unreachable" });
+        emit(m.id, "agent.say", { agentId: lead.id, say: vi ? `${agent.name} gặp sự cố — để tôi tiếp quản phần việc này.` : `${agent.name} hit an error — I'll take this one over.` });
+        await pace(m, 2200);
+        emit(m.id, "agent.progress", { agentId: lead.id, sub: sub.id, status: "doing", title: sub.title, takeover: { from: agent.id, fromName: agent.name } });
         try {
-          out = await runtime("/run", {
-            missionId: m.id,
-            role,
-            agent: lead,
-            subtask: {
-              id: sub.id,
-              title: sub.title
-            },
-            missionTitle: m.title,
-            context: `${m.clarifyAnswer ? `The user clarified: ${m.clarifyAnswer}\n` : ""}The assigned ${role} specialist could not complete this subtask (error: ${out.error || "model unreachable"}). As the lead Orchestrator, take over and complete this ${role} work yourself now, keeping the same standards.`,
-            complexity: m.assessment?.complexity || "standard",
-            informational: !!m.assessment?.informational,
-            userEmail: m.userEmail || null,
-            language: m.language
-          });
+          out = await rt("/run", { ...base, agent: lead, agentId: lead.id, stage, blackboard, context: `${m.clarifyAnswer ? `${vi ? "Người dùng làm rõ" : "The user clarified"}: ${m.clarifyAnswer}\n` : ""}${vi ? `Worker được giao không hoàn thành (lỗi: ${out.error || "model lỗi"}). Là lead, hãy tự làm phần việc này.` : `The assigned worker could not complete this (error: ${out.error || "model failure"}). As the lead, take it over and complete it yourself.`}` });
         } catch (e) {
           out = { failed: true, error: String(e.message || e).slice(0, 200) };
         }
-        results[role] = out;
-        if (out.failed || out.questionForLead) {
-          sub.status = "failed";
-          emit(m.id, "agent.progress", {
-            agentId: lead.id,
-            sub: sub.id,
-            status: "failed",
-            error: String(out.error || "lead takeover failed")
-          });
-          return;
+        emitTools(lead.id, out);
+        if (out.failed) {
+          emit(m.id, "agent.progress", { agentId: lead.id, sub: sub.id, status: "failed", error: String(out.error || "lead takeover failed") });
+          return null;
         }
-        workerAgent = lead;
-        takenOver = true;
-        for (const tc of out.toolCalls || []) {
-          emit(m.id, "agent.tool", {
-            agentId: lead.id,
-            server: tc.server,
-            tool: tc.tool,
-            allowed: tc.allowed,
-            reason: tc.reason || null,
-            result: tc.result || null,
-            args: tc.args || null
-          });
-          await pace(m, 700);
-        }
+        out._takeover = { from: agent.id, fromName: agent.name };
+        out._workerId = lead.id;
+        out._workerName = lead.name;
+        out._model = lead.model;
+        return out;
       }
-      if (!out.simulated && !takenOver) {
-        sub.status = "review";
-        emit(m.id, "agent.review", {
-          agentId: lead.id,
-          target: agent.id,
-          sub: sub.id
-        });
-        try {
-          const review = await runtime("/review", {
-            agent: lead,
-            missionTitle: m.title,
-            subtask: sub.title,
-            output: pick(out, ["summary", "keyPoints", "stance", "confidence"]),
-            language: m.language
-          });
-          if (review.pass === false && review.feedback) {
-            emit(m.id, "agent.redo", {
-              agentId: lead.id,
-              target: agent.id,
-              sub: sub.id,
-              feedback: review.feedback
-            });
-            await pace(m, 3500);
-            sub.status = "doing";
-            emit(m.id, "agent.progress", {
-              agentId: agent.id,
-              sub: sub.id,
-              status: "doing",
-              title: sub.title
-            });
-            const redo = await runtime("/run", {
-              missionId: m.id,
-              role,
-              agent,
-              subtask: {
-                id: sub.id,
-                title: sub.title
-              },
-              missionTitle: m.title,
-              context: `${m.clarifyAnswer ? `The user clarified: ${m.clarifyAnswer}\n` : ""}The Orchestrator reviewed your first attempt and asked you to redo it: ${review.feedback}`,
-              complexity: m.assessment?.complexity || "standard",
-        informational: !!m.assessment?.informational,
-              userEmail: m.userEmail || null,
-              language: m.language
-            });
-            if (!redo.failed && !redo.questionForLead) {
-              out = redo;
-              for (const tc of redo.toolCalls || []) {
-                emit(m.id, "agent.tool", {
-                  agentId: agent.id,
-                  server: tc.server,
-                  tool: tc.tool,
-                  allowed: tc.allowed,
-                  reason: tc.reason || null,
-                  result: tc.result || null,
-                  args: tc.args || null
-                });
-                await pace(m, 600);
-              }
-            }
-            emit(m.id, "agent.reviewed", {
-              agentId: lead.id,
-              target: agent.id,
-              sub: sub.id,
-              pass: true,
-              redone: true
-            });
-          } else {
-            emit(m.id, "agent.reviewed", {
-              agentId: lead.id,
-              target: agent.id,
-              sub: sub.id,
-              pass: true,
-              redone: false
-            });
+      out._workerId = agent.id;
+      out._workerName = agent.name;
+      out._model = agent.model;
+      return out;
+    };
+
+    const runPhase = async (phaseSpec, phaseIndex) => {
+      const assignments = (phaseSpec.assignments || []).slice(0, Math.max(1, pool.length));
+      const subs = assignments.map((a, i) => {
+        const agent = pool[(phaseIndex + i) % pool.length];
+        return { id: nextSub++, agentId: agent.id, title: a.focus, lens: a.lens || "", phase: phaseIndex, status: "todo" };
+      });
+      for (const s of subs) m.subtasks.push(s);
+      const subView = subs.map(s => ({ id: s.id, agentId: s.agentId, title: s.title, lens: s.lens, phase: s.phase, status: s.status }));
+      if (phaseIndex === 0) emit(m.id, "mission.plan", { subtasks: subView, assessment: m.assessment, approach: plan.approach || null });
+      else emit(m.id, "phase.started", { index: phaseIndex, goal: phaseSpec.goal || "", subtasks: subView });
+      await pace(m, 2400);
+      emit(m.id, "phase.disperse", {});
+      await pace(m, 1800);
+      const blackboard = [...m.blackboard];
+      for (const s of subs) {
+        s.status = "doing";
+        emit(m.id, "agent.progress", { agentId: s.agentId, sub: s.id, status: "doing", title: s.title });
+      }
+      const drafts = await Promise.all(subs.map(async s => ({ sub: s, out: await runWorker(s, "draft", blackboard, []) })));
+      let finals = drafts;
+      const live = drafts.filter(d => d.out && !d.out.failed);
+      const doExchange = live.length >= 2 && complexity !== "simple" && phaseIndex === 0;
+      if (doExchange) {
+        const peerLines = live.map(d => `${d.out._workerName} — ${d.sub.title}: ${firstSentence(d.out.summary || d.out.say || "")} [${d.out.stance || "?"}, ${d.out.confidence ?? "?"}%]`);
+        for (const d of live) emit(m.id, "agent.share", { agentId: d.out._workerId, peers: live.filter(x => x !== d).map(x => x.out._workerId), say: vi ? "Đối chiếu với cả nhóm…" : "Comparing notes with the team…" });
+        await pace(m, 3000);
+        finals = await Promise.all(drafts.map(async d => {
+          if (!d.out || d.out.failed) return d;
+          const peers = peerLines.filter((_, i) => live[i] !== d);
+          let ex = null;
+          try { ex = await runWorker(d.sub, "exchange", blackboard, peers); } catch { ex = null; }
+          if (ex && !ex.failed) {
+            ex._workerId = ex._workerId || d.out._workerId;
+            ex._workerName = ex._workerName || d.out._workerName;
+            ex._model = ex._model || d.out._model;
+            ex._takeover = ex._takeover || d.out._takeover;
+            ex.toolCalls = [...(d.out.toolCalls || []), ...(ex.toolCalls || [])];
+            return { sub: d.sub, out: ex };
           }
-        } catch (err) {
-          console.warn(`[orchestrator] review skipped for ${role}: ${err.message}`);
-        }
+          return d;
+        }));
       }
-      sub.status = "done";
-      m.outputs.push({
-        role,
-        agentId: workerAgent.id,
-        name: workerAgent.name,
-        ...(takenOver ? { takeover: { from: agent.id, fromName: agent.name } } : {}),
-        toolCalls: (out.toolCalls || []).filter(tc => tc.allowed && tc.result).map(tc => ({
-          server: tc.server,
-          tool: tc.tool,
-          args: tc.args || null,
-          result: tc.result
-        })),
-        ...pick(out, ["summary", "keyPoints", "stance", "confidence", "say", "policyGroup", "simulated"])
-      });
-      emit(m.id, "agent.progress", {
-        agentId: workerAgent.id,
-        sub: sub.id,
-        status: "done",
-        say: out.say,
-        stance: out.stance,
-        confidence: out.confidence,
-        summary: out.summary,
-        keyPoints: out.keyPoints,
-        simulated: !!out.simulated,
-        takeover: takenOver ? { from: agent.id, fromName: agent.name } : null
-      });
-    }));
-    if (!m.outputs.filter(o => o.role !== "reporter").length) {
-      throw new Error(m.language === "vi" ? "tất cả specialist đều lỗi — model không phản hồi" : "all specialists failed — models unreachable");
-    }
-    const repAgent = byRole("reporter");
-    const repSub = m.subtasks.find(s => s.role === "reporter");
-    const criticAgent = byRole("critic");
-    const verifiable = m.outputs.filter(o => o.role !== "reporter" && o.role !== "critic" && !o.simulated);
-    if (results.critic && !results.critic.simulated && verifiable.length) {
-      emit(m.id, "verify.started", {
-        agentId: criticAgent.id
-      });
+      const phaseOutputs = [];
+      for (const { sub, out } of finals) {
+        if (!out || out.failed) continue;
+        sub.status = "done";
+        const record = {
+          phase: phaseIndex,
+          agentId: out._workerId,
+          name: out._workerName,
+          model: out._model,
+          focus: sub.title,
+          lens: sub.lens,
+          ...(out._takeover ? { takeover: out._takeover } : {}),
+          toolCalls: (out.toolCalls || []).filter(tc => tc.allowed && tc.result).map(tc => ({ server: tc.server, tool: tc.tool, args: tc.args || null, result: tc.result })),
+          ...pick(out, ["summary", "keyPoints", "stance", "confidence", "say", "policyGroup", "simulated", "verifyNote"])
+        };
+        m.outputs.push(record);
+        phaseOutputs.push(record);
+        if (out.simulated) emit(m.id, "agent.say", { agentId: out._workerId, say: vi ? "⚠ model không phản hồi — trả lời từ offline fallback" : "⚠ model unreachable — answered from offline fallback", tone: "warn" });
+        emit(m.id, "agent.progress", {
+          agentId: out._workerId,
+          sub: sub.id,
+          status: "done",
+          say: out.say,
+          stance: out.stance,
+          confidence: out.confidence,
+          summary: out.summary,
+          keyPoints: out.keyPoints,
+          simulated: !!out.simulated,
+          takeover: out._takeover || null
+        });
+        await pace(m, 600);
+      }
+      return phaseOutputs;
+    };
+
+    const drainBoard = async () => {
+      if (!INTERAGENT_BUS) return;
+      const open = (m.board || []).filter(t => t.status === "open").slice(0, 2);
+      let i = 0;
+      for (const task of open) {
+        if (task.status !== "open") continue;
+        const worker = pool[i++ % pool.length];
+        task.status = "claimed";
+        task.claimedBy = worker.id;
+        emit(m.id, "task.claimed", { agentId: worker.id, taskId: task.id, title: task.title });
+        await pace(m, 1200);
+        let out = null;
+        try {
+          out = await rt("/run", {
+            missionId: m.id, role: "worker", agent: worker, agentId: worker.id,
+            assignment: { focus: `${task.title}${task.detail ? " — " + task.detail : ""}`, lens: "" },
+            missionTitle: m.title, complexity, informational,
+            userEmail: m.userEmail || null, language: m.language, stage: "draft",
+            blackboard: [...m.blackboard],
+            busUrl: `${SELF_URL}/missions/${m.id}/bus`, roster: squad.map(a => ({ id: a.id, name: a.name })), inbox: []
+          });
+        } catch { out = null; }
+        const result = out && !out.failed ? out.summary || out.say || "" : "(could not complete)";
+        if (out && !out.failed) emitTools(worker.id, out);
+        task.status = "done";
+        task.result = String(result).slice(0, 600);
+        task.doneBy = worker.id;
+        m.blackboard.push(`${worker.name} (picked up board task “${task.title}”): ${firstSentence(result)}`);
+        m.blackboard = m.blackboard.slice(-14);
+        emit(m.id, "task.completed", { agentId: worker.id, taskId: task.id, title: task.title });
+        missionStore.save(m);
+        await pace(m, 800);
+      }
+    };
+
+    let phaseSpec = plan.phase;
+    let lastSynthesis = null;
+    for (let phaseIndex = 0; phaseIndex < MAX_PHASES && phaseSpec && (phaseSpec.assignments || []).length; phaseIndex++) {
+      const phaseOutputs = await runPhase(phaseSpec, phaseIndex);
+      if (!phaseOutputs.length && phaseIndex === 0) {
+        throw new Error(vi ? "tất cả worker đều lỗi — model không phản hồi" : "all workers failed — models unreachable");
+      }
+      m.phases.push({ index: phaseIndex, goal: phaseSpec.goal || "", assignments: phaseSpec.assignments, synthesis: null });
+      emit(m.id, "phase.gather", { place: "meeting" });
+      emit(m.id, "synthesize.started", { agentId: lead.id, iteration: phaseIndex });
+      await pace(m, 1800);
+      let synthesis;
       try {
-        const v = await runtime("/verify", {
+        synthesis = await rt("/synthesize", {
           missionId: m.id,
-          agent: criticAgent,
+          agent: lead,
           missionTitle: m.title,
-          outputs: verifiable.map(o => pick(o, ["role", "agentId", "summary", "keyPoints", "stance", "confidence"])),
+          phaseGoal: phaseSpec.goal || "",
+          outputs: m.outputs.map(o => pick(o, ["agentId", "name", "focus", "lens", "summary", "keyPoints", "stance", "confidence", "flags"])),
+          blackboard: m.blackboard,
+          phaseIndex,
+          maxPhases: MAX_PHASES,
+          informational,
+          language: m.language
+        });
+      } catch (err) {
+        console.warn(`[orchestrator] synthesize skipped: ${err.message}`);
+        synthesis = { phaseSummary: "", concerns: [], sufficient: true, nextPhase: null };
+      }
+      m.phases[m.phases.length - 1].synthesis = { phaseSummary: synthesis.phaseSummary, concerns: synthesis.concerns || [], sufficient: !!synthesis.sufficient };
+      pushBlackboard(phaseOutputs, synthesis);
+      lastSynthesis = synthesis;
+      emit(m.id, "phase.synthesized", {
+        agentId: lead.id,
+        index: phaseIndex,
+        summary: synthesis.phaseSummary || "",
+        sufficient: !!synthesis.sufficient,
+        concerns: synthesis.concerns || [],
+        nextGoal: synthesis.nextPhase?.goal || null
+      });
+      await pace(m, 2200);
+      if (synthesis.sufficient || !synthesis.nextPhase || phaseIndex >= MAX_PHASES - 1) {
+        phaseSpec = null;
+      } else {
+        emit(m.id, "agent.say", { agentId: lead.id, say: vi ? `Còn thiếu vài điểm — mở thêm một giai đoạn: ${synthesis.nextPhase.goal || ""}` : `A few gaps remain — opening another phase: ${synthesis.nextPhase.goal || ""}` });
+        await pace(m, 2200);
+        phaseSpec = synthesis.nextPhase;
+      }
+    }
+    void lastSynthesis;
+
+    if (!m.outputs.length) {
+      throw new Error(vi ? "tất cả worker đều lỗi — model không phản hồi" : "all workers failed — models unreachable");
+    }
+
+    await drainBoard();
+
+    const verifiable = m.outputs.filter(o => !o.simulated);
+    if (verifiable.length) {
+      emit(m.id, "verify.started", { agentId: lead.id });
+      try {
+        const v = await rt("/verify", {
+          missionId: m.id,
+          agent: lead,
+          missionTitle: m.title,
+          outputs: verifiable.map(o => pick(o, ["agentId", "name", "focus", "summary", "keyPoints", "stance", "confidence"])),
           language: m.language
         });
         for (const verdict of v.verdicts || []) {
-          const o = m.outputs.find(x => x.role === verdict.role);
+          const o = m.outputs.find(x => x.agentId === verdict.agentId);
           if (!o) continue;
           o.flags = verdict.flagged;
-          o.verifyNote = verdict.note;
+          o.verifyNote = verdict.note || o.verifyNote;
           if (typeof o.confidence === "number" && verdict.confidenceAdjust) {
             o.confidenceBefore = o.confidence;
             o.confidence = Math.max(5, Math.min(100, o.confidence + verdict.confidenceAdjust));
           }
         }
         const flagged = (v.verdicts || []).filter(x => x.flagged.length);
-        emit(m.id, "verify.done", {
-          agentId: criticAgent.id,
-          flags: flagged.map(x => ({
-            role: x.role,
-            count: x.flagged.length,
-            note: x.note
-          }))
-        });
+        emit(m.id, "verify.done", { agentId: lead.id, flags: flagged.map(x => ({ agentId: x.agentId, count: x.flagged.length, note: x.note })) });
         if (flagged.length) {
-          emit(m.id, "agent.say", {
-            agentId: criticAgent.id,
-            say: m.language === "vi" ? `Tôi đã kiểm chứng số liệu — ${flagged.reduce((n, x) => n + x.count, 0)} điểm cần dè chừng.` : `Fact-check done — ${flagged.reduce((n, x) => n + x.count, 0)} claims need caution.`
-          });
-          await pace(m, 3000);
+          emit(m.id, "agent.say", { agentId: lead.id, say: vi ? `Tôi đã kiểm chứng số liệu — ${flagged.reduce((n, x) => n + x.flagged.length, 0)} điểm cần dè chừng.` : `Fact-check done — ${flagged.reduce((n, x) => n + x.flagged.length, 0)} claims need caution.` });
+          await pace(m, 2600);
         }
       } catch (err) {
         console.warn(`[orchestrator] verify pass skipped: ${err.message}`);
       }
     }
-    const informational = !!m.assessment?.informational;
-    const stances = m.outputs.filter(o => o.role !== "reporter");
+
+    const stances = m.outputs;
     const realStances = stances.filter(o => !o.simulated);
     const considered = realStances.length ? realStances : stances;
     const support = considered.filter(o => o.stance === "support");
@@ -423,66 +415,68 @@ export async function runMission(mission) {
     if (conflict) {
       m.status = "meeting";
       const dissent = [...oppose, ...conditional];
-      emit(m.id, "conflict.detected", {
-        between: considered.map(o => o.agentId),
-        summary: {
-          support: support.map(o => o.role),
-          oppose: dissent.map(o => o.role)
-        }
-      });
+      emit(m.id, "conflict.detected", { between: considered.map(o => o.agentId), summary: { support: support.map(o => o.name), oppose: dissent.map(o => o.name) } });
       await pace(m, 1800);
-      await runMeeting(m);
+      await runMeeting(m, signal);
     } else {
       m.meeting = null;
       emit(m.id, "conflict.none", {});
     }
+
     m.status = "reporting";
-    repSub.status = "doing";
-    emit(m.id, "agent.progress", {
-      agentId: repAgent.id,
-      sub: repSub.id,
-      status: "doing",
-      title: repSub.title
-    });
-    emit(m.id, "report.started", {
-      agentId: repAgent.id
-    });
+    if (m.depth === "deep" && !informational) {
+      emit(m.id, "scenarios.started", { agentId: lead.id });
+      await pace(m, 1600);
+      try {
+        const sc = await rt("/scenarios", {
+          missionId: m.id,
+          agent: lead,
+          missionTitle: m.title,
+          outputs: m.outputs.map(o => pick(o, ["agentId", "name", "focus", "summary", "keyPoints", "stance", "confidence"])),
+          language: m.language
+        });
+        m.scenarios = sc;
+        emit(m.id, "scenarios.done", { agentId: lead.id, scenarios: sc.scenarios, sensitivity: sc.sensitivity });
+      } catch (err) {
+        console.warn(`[orchestrator] scenarios skipped: ${err.message}`);
+      }
+      await pace(m, 1600);
+    }
+    emit(m.id, "report.started", { agentId: lead.id });
     await pace(m, 3000);
-    const report = await runtime("/report", {
+    const report = await rt("/report", {
       missionId: m.id,
       missionTitle: m.title,
-      outputs: m.outputs.filter(o => o.role !== "reporter"),
+      outputs: m.outputs.map(({ toolCalls, ...o }) => o),
       meeting: m.meeting,
       informational,
       language: m.language,
-      agent: repAgent
+      depth: m.depth,
+      scenarios: m.scenarios ? m.scenarios.scenarios : null,
+      agent: lead
     });
-    m.report = pick(report, ["markdown", "recommendation", "confidence"]);
-    emit(m.id, "agent.say", {
-      agentId: repAgent.id,
-      say: report.say
-    });
+    m.report = pick(report, ["markdown", "recommendation", "confidence", "confidenceRationale"]);
+    if (m.report.markdown && m.outputs.some(o => o.simulated) && !/provisional|tạm thời/i.test(m.report.markdown)) {
+      m.report.markdown = (vi
+        ? "> ⚠️ **Tạm thời:** một phần báo cáo được tạo offline do phân tích trực tiếp không khả dụng — hãy coi là sơ bộ.\n\n"
+        : "> ⚠️ **Provisional:** part of this report was generated offline because live analysis was unavailable — treat as preliminary.\n\n") + m.report.markdown;
+    }
+    emit(m.id, "agent.say", { agentId: lead.id, say: report.say });
     await pace(m, 1200);
-    repSub.status = "done";
-    emit(m.id, "agent.progress", {
-      agentId: repAgent.id,
-      sub: repSub.id,
-      status: "done",
-      say: null
-    });
     emit(m.id, "report.ready", {
       ...m.report,
-      agentId: repAgent.id,
-      breakdown: m.outputs.filter(o => o.role !== "reporter").map(o => pick(o, ["role", "agentId", "name", "stance", "confidence", "confidenceBefore", "flags", "simulated", "takeover"]))
+      agentId: lead.id,
+      scenarios: m.scenarios ? m.scenarios.scenarios : null,
+      sensitivity: m.scenarios ? m.scenarios.sensitivity : null,
+      phases: m.phases.map(p => ({ index: p.index, goal: p.goal, synthesis: p.synthesis })),
+      breakdown: m.outputs.map(o => pick(o, ["agentId", "name", "focus", "lens", "stance", "confidence", "confidenceBefore", "flags", "simulated", "takeover"]))
     });
     m.status = "done";
     const decision = informational ? "informational" : m.meeting?.decision || (oppose.length ? "do-not-proceed" : considered.some(o => o.stance === "conditional") ? "proceed-with-conditions" : "proceed");
     m.decision = decision;
-    emit(m.id, "mission.completed", {
-      title: m.title,
-      decision,
-      recommendation: m.report.recommendation
-    });
+    const fragility = informational ? null : fragilityOf(m.meeting?.participants?.length ? m.meeting.participants : considered);
+    m.fragility = fragility;
+    emit(m.id, "mission.completed", { title: m.title, decision, recommendation: m.report.recommendation, fragility });
     const flagCount = m.outputs.reduce((n, o) => n + (o.flags?.length || 0), 0);
     briefingStore.add({
       id: `b_${m.id}`,
@@ -499,11 +493,44 @@ export async function runMission(mission) {
       userEmail: m.userEmail || null,
       at: Date.now()
     });
+    const calTopic = topicOf(m.title);
+    const calEvents = m.outputs.map((o, i) => ({
+      id: `cal_${m.id}_${o.agentId}_${i}`,
+      missionId: m.id,
+      userEmail: m.userEmail || null,
+      agentId: o.agentId,
+      lens: o.lens || null,
+      focus: o.focus || null,
+      model: o.model || null,
+      topic: calTopic,
+      predictedConfidence: o.confidence ?? null,
+      confidenceBefore: o.confidenceBefore ?? null,
+      stance: o.stance || null,
+      flagsCount: o.flags?.length || 0,
+      simulated: !!o.simulated,
+      decision
+    }));
+    calEvents.push({
+      id: `cal_${m.id}_final`,
+      missionId: m.id,
+      userEmail: m.userEmail || null,
+      agentId: lead.id,
+      lens: "synthesize",
+      focus: null,
+      model: lead.model,
+      topic: calTopic,
+      predictedConfidence: m.report.confidence ?? null,
+      confidenceBefore: null,
+      stance: null,
+      flagsCount: flagCount,
+      simulated: !!m.outputs.some(o => o.simulated),
+      decision
+    });
+    calibrationStore.add(calEvents);
     try {
-      const vi = m.language === "vi";
       const outcomes = m.outputs.map(o => ({
         agentId: o.agentId,
-        role: o.role,
+        focus: o.focus,
         simulated: !!o.simulated,
         title: m.title,
         stance: o.stance,
@@ -511,34 +538,25 @@ export async function runMission(mission) {
         summary: o.summary,
         keyPoints: o.keyPoints,
         lesson: vi
-          ? `Nhiệm vụ “${m.title}”: bạn kết luận ${o.stance} (${o.confidence}%); cả đội chốt ${decision}.`
-          : `Mission “${m.title}”: you concluded ${o.stance} (${o.confidence}%); the squad decided ${decision}.`
+          ? `Nhiệm vụ “${m.title}”: bạn phụ trách “${o.focus}”, kết luận ${o.stance} (${o.confidence}%); cả đội chốt ${decision}.`
+          : `Mission “${m.title}”: you owned “${o.focus}”, concluded ${o.stance} (${o.confidence}%); the squad decided ${decision}.`
       }));
       outcomes.push({
         agentId: lead.id,
-        role: "orchestrator",
+        focus: "orchestration",
         title: m.title,
         lesson: vi
-          ? `Nhiệm vụ “${m.title}”: bạn phân rã ${m.subtasks.length} subtask; ${m.meeting ? "có họp đồng thuận" : "không cần họp"}; kết luận ${decision}.`
-          : `Mission “${m.title}”: you decomposed ${m.subtasks.length} subtasks; ${m.meeting ? "a consensus meeting was held" : "no meeting needed"}; decision ${decision}.`
-      }, {
-        agentId: repAgent.id,
-        role: "reporter",
-        title: m.title,
-        lesson: vi
-          ? `Nhiệm vụ “${m.title}”: bạn tổng hợp báo cáo cuối với độ tin cậy ${m.report.confidence}%.`
-          : `Mission “${m.title}”: you assembled the final report at ${m.report.confidence}% confidence.`
+          ? `Nhiệm vụ “${m.title}”: bạn điều phối ${m.phases.length} giai đoạn, tổng hợp và chốt ${decision} (độ tin cậy ${m.report.confidence}%).`
+          : `Mission “${m.title}”: you orchestrated ${m.phases.length} phase(s), synthesized and concluded ${decision} (confidence ${m.report.confidence}%).`
       });
-      await runtime("/memory/commit", { missionId: m.id, outcomes, userEmail: m.userEmail || null });
+      await rt("/memory/commit", { missionId: m.id, outcomes, userEmail: m.userEmail || null });
     } catch {}
     await pace(m, 2500);
     emit(m.id, "phase.disperse", {});
   } catch (err) {
     console.error(`[orchestrator] mission ${m.id} failed:`, err);
     m.status = "failed";
-    emit(m.id, "mission.failed", {
-      error: String(err.message || err)
-    });
+    emit(m.id, "mission.failed", { error: String(err.message || err) });
     briefingStore.add({
       id: `b_${m.id}`,
       missionId: m.id,
@@ -552,14 +570,15 @@ export async function runMission(mission) {
     });
   }
 }
-async function runEvent(m, assessment) {
-  const lead = byRole("orchestrator");
+
+async function runEvent(m, assessment, _signal) {
+  const squad = Array.isArray(m.squad) && m.squad.length ? m.squad : getSquadFor(m.userEmail);
+  const lead = leadOf(squad);
   const vi = m.language === "vi";
   const kind = assessment.eventKind;
   m.assessment = assessment;
   m.subtasks = [];
   m.status = "event";
-  const squad = getSquad();
   const nameOf = id => (squad.find(s => s.id === id) || {}).name || id;
   emit(m.id, "event.started", {
     kind,
@@ -570,36 +589,16 @@ async function runEvent(m, assessment) {
   if (kind === "swim-race") {
     const racers = squad.filter(s => !s.lead).map(s => s.id);
     const order = [...racers].sort(() => Math.random() - 0.5);
-    emit(m.id, "event.race", {
-      racers,
-      order,
-      leadId: lead.id
-    });
+    emit(m.id, "event.race", { racers, order, leadId: lead.id });
     await pace(m, 26000);
     const winner = order[0];
-    emit(m.id, "event.result", {
-      winner,
-      order,
-      agentId: lead.id,
-      say: vi ? `🏆 ${nameOf(winner)} về nhất! Một cuộc đua mãn nhãn.` : `🏆 ${nameOf(winner)} takes it! What a race.`
-    });
-    m.eventResult = {
-      kind,
-      winner: nameOf(winner),
-      order: order.map(nameOf)
-    };
+    emit(m.id, "event.result", { winner, order, agentId: lead.id, say: vi ? `🏆 ${nameOf(winner)} về nhất! Một cuộc đua mãn nhãn.` : `🏆 ${nameOf(winner)} takes it! What a race.` });
+    m.eventResult = { kind, winner: nameOf(winner), order: order.map(nameOf) };
     await pace(m, 6000);
   } else {
-    emit(m.id, "event.party", {
-      kind,
-      place: kind === "basketball" ? "court" : "cafe",
-      durationMs: 28000
-    });
+    emit(m.id, "event.party", { kind, place: kind === "basketball" ? "court" : "cafe", durationMs: 28000 });
     await pace(m, 30000);
-    m.eventResult = {
-      kind,
-      participants: squad.map(s => s.name)
-    };
+    m.eventResult = { kind, participants: squad.map(s => s.name) };
   }
   const recap = vi ? [`## Sự kiện`, `**${m.title}** — đã tổ chức thành công 🎉`, kind === "swim-race" ? `## Kết quả\n${m.eventResult.order.map((n, i) => `${i + 1}. ${n}${i === 0 ? " 🏆" : ""}`).join("\n")}` : `## Tham gia\n${squad.map(s => `- ${s.name}`).join("\n")}`, `## Ghi chú\nCả đội đã có khoảng nghỉ xứng đáng — quay lại làm việc thôi!`].join("\n\n") : [`## Event`, `**${m.title}** — wrapped 🎉`, kind === "swim-race" ? `## Results\n${m.eventResult.order.map((n, i) => `${i + 1}. ${n}${i === 0 ? " 🏆" : ""}`).join("\n")}` : `## Participants\n${squad.map(s => `- ${s.name}`).join("\n")}`, `## Note\nWell-earned break — back to work!`].join("\n\n");
   m.report = {
@@ -610,55 +609,38 @@ async function runEvent(m, assessment) {
   m.decision = "event";
   m.status = "done";
   emit(m.id, "event.ended", {});
-  emit(m.id, "report.ready", {
-    ...m.report,
-    agentId: lead.id
-  });
-  emit(m.id, "mission.completed", {
-    title: m.title,
-    decision: "event",
-    recommendation: m.report.recommendation
-  });
+  emit(m.id, "report.ready", { ...m.report, agentId: lead.id });
+  emit(m.id, "mission.completed", { title: m.title, decision: "event", recommendation: m.report.recommendation });
   await pace(m, 2000);
   emit(m.id, "phase.disperse", {});
 }
-async function runMeeting(m) {
-  const lead = byRole("orchestrator");
-  const participants = m.outputs.filter(o => o.role !== "reporter");
-  emit(m.id, "meeting.started", {
-    agentIds: getSquad().map(a => a.id),
-    place: "meeting"
-  });
-  await pace(m, 9000);
-  emit(m.id, "agent.say", {
-    agentId: lead.id,
-    say: m.language === "vi" ? "Quan điểm đang trái chiều — ta phản biện từng điểm rồi chốt chung." : "We have a split — let's debate the points, then land a shared call."
-  });
-  await pace(m, 3500);
+
+async function runMeeting(m, signal) {
+  const squad = Array.isArray(m.squad) && m.squad.length ? m.squad : getSquadFor(m.userEmail);
+  const rt = (path, body) => runtime(path, body, signal, m.userEmail);
+  const lead = leadOf(squad);
+  const agentById = id => squad.find(a => a.id === id) || lead;
+  emit(m.id, "meeting.started", { agentIds: squad.map(a => a.id), place: "meeting" });
+  await pace(m, 5000);
+  emit(m.id, "agent.say", { agentId: lead.id, say: m.language === "vi" ? "Quan điểm đang trái chiều — ta phản biện từng điểm rồi chốt chung." : "We have a split — let's debate the points, then land a shared call." });
+  await pace(m, 2500);
   const transcript = [];
-  const positions = participants.map(o => ({
-    role: o.role,
-    agentId: o.agentId,
-    name: o.name,
-    stance: o.stance,
-    summary: o.summary,
-    keyPoints: o.keyPoints || []
-  }));
+  const latest = new Map();
+  for (const o of m.outputs) latest.set(o.agentId, o);
+  const rank = { oppose: 0, support: 1, conditional: 2, insufficient: 3 };
+  const positions = [...latest.values()]
+    .sort((a, b) => (rank[a.stance] ?? 4) - (rank[b.stance] ?? 4) || (b.confidence || 0) - (a.confidence || 0))
+    .slice(0, 4)
+    .map(o => ({ agentId: o.agentId, name: o.name, focus: o.focus, stance: o.stance, summary: o.summary, keyPoints: o.keyPoints || [] }));
   for (let round = 1; round <= 2; round++) {
-    const order = ["critic", "analyst", "research", "creative"].filter(r => positions.find(p => p.role === r));
-    for (const role of order) {
-      const pos = positions.find(p => p.role === role);
-      const others = positions.filter(p => p.role !== role);
+    for (const pos of positions) {
+      const others = positions.filter(p => p.agentId !== pos.agentId);
       const directorNote = (m.steers || []).map(s => s.text).join(" · ");
-      const turn = await runtime("/meeting-turn", {
+      const turn = await rt("/meeting-turn", {
         missionId: m.id,
-        role,
-        agent: byRole(role),
+        agent: agentById(pos.agentId),
         missionTitle: m.title,
-        position: {
-          stance: pos.stance,
-          summary: pos.summary
-        },
+        position: { stance: pos.stance, summary: pos.summary },
         others,
         directorNote,
         round,
@@ -671,51 +653,26 @@ async function runMeeting(m) {
         await pace(m, 800);
         continue;
       }
+      const stanceBefore = pos.stance;
       pos.stance = turn.stance || pos.stance;
-      transcript.push({
-        round,
-        role,
-        agentId: pos.agentId,
-        name: pos.name,
-        say: turn.say,
-        argument: turn.argument,
-        stance: pos.stance
-      });
-      emit(m.id, "meeting.turn", {
-        round,
-        agentId: pos.agentId,
-        say: turn.say,
-        argument: turn.argument,
-        stance: pos.stance
-      });
-      await pace(m, 4200);
+      const conceded = !!(stanceBefore && pos.stance && stanceBefore !== pos.stance && pos.stance !== "oppose");
+      let towardAgentId = null;
+      if (conceded) {
+        const ally = positions.find(p => p.agentId !== pos.agentId && p.stance === pos.stance) || positions.find(p => p.agentId !== pos.agentId);
+        towardAgentId = ally ? ally.agentId : null;
+      }
+      transcript.push({ round, agentId: pos.agentId, name: pos.name, say: turn.say, argument: turn.argument, stance: pos.stance, stanceBefore, conceded, towardAgentId });
+      emit(m.id, "meeting.turn", { round, agentId: pos.agentId, say: turn.say, argument: turn.argument, stance: pos.stance, stanceBefore, conceded, towardAgentId });
+      await pace(m, 2800);
     }
     const stillOpposed = positions.some(p => p.stance === "oppose");
     if (!stillOpposed) break;
   }
-  const consensus = await runtime("/consensus", {
-    missionTitle: m.title,
-    positions,
-    transcript,
-    language: m.language,
-    model: lead.models || lead.model
-  });
-  m.meeting = {
-    participants: positions,
-    transcript,
-    decision: consensus.decision,
-    rationale: consensus.rationale,
-    conditions: consensus.conditions || []
-  };
-  emit(m.id, "meeting.resolved", {
-    agentId: lead.id,
-    say: consensus.say,
-    decision: consensus.decision,
-    rationale: consensus.rationale,
-    conditions: m.meeting.conditions
-  });
+  const consensus = await rt("/consensus", { missionTitle: m.title, positions, transcript, language: m.language, model: lead.models || lead.model });
+  const fragility = fragilityOf(positions);
+  m.meeting = { participants: positions, transcript, decision: consensus.decision, rationale: consensus.rationale, conditions: consensus.conditions || [], fragility };
+  emit(m.id, "meeting.resolved", { agentId: lead.id, say: consensus.say, decision: consensus.decision, rationale: consensus.rationale, conditions: m.meeting.conditions, fragility });
   await pace(m, 3500);
   emit(m.id, "phase.disperse", {});
   await pace(m, 2000);
 }
-const pick = (obj, keys) => Object.fromEntries(keys.filter(k => k in obj).map(k => [k, obj[k]]));

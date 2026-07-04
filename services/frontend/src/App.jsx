@@ -3,18 +3,21 @@ import AS from "./data.js";
 import ASWorld from "./world/engine.js";
 import { api, session, connectEvents } from "./api.js";
 import { createMissionDriver } from "./missionDriver.js";
-import { TopBar, Dock, ZoomControls, ActivityFeed, Login, Onboarding } from "./components/chrome.jsx";
+import { TopBar, Dock, ZoomControls, ActivityFeed, Login, Onboarding, Toaster } from "./components/chrome.jsx";
 import { AgentPanel, AgentDashboard, MissionPanel, TasksPanel, MissionPill, IncidentPill, VerdictReveal, InboxPanel } from "./components/panels.jsx";
 import "./styles/agentsphere.css";
 const AMBIENT_LOG = {
-  cafe: "took a break at the food hall",
+  cafe: "grabbed a pantry coffee",
   gym: "hit the GreenNode gym",
   pool: "went for a swim in the pool",
-  park: "went for a walk around the lake",
-  field: "kicked a ball around the VNG pitch",
+  park: "visited cây lộc vừng siuuu to",
   court: "shot some hoops on the basketball court",
-  courtyard: "relaxed in The Loop's inner courtyard",
-  nap: "dozed off at their desk for a minute",
+  courtyard: "relaxed at the Seating Area",
+  atrium: "admired the atrium tree",
+  lobby: "hung out in the Main Lobby",
+  store: "did a 7-Eleven snack run",
+  game: "played a round at the Game Corner",
+  nap: "dozed off at their desk",
   resume: "returned to their desk"
 };
 let __logSeq = 0;
@@ -39,6 +42,97 @@ function applySquad(squad) {
   });
 }
 const resetSquad = () => applySquad(DEFAULT_AGENTS);
+const PHASE_MAP = {
+  planning: "planning",
+  executing: "executing",
+  meeting: "meeting",
+  reporting: "reporting",
+  clarifying: "clarifying",
+  event: "event",
+  done: "done",
+  failed: "failed"
+};
+const STAGE_MAP = {
+  clarifying: 0,
+  planning: 0,
+  executing: 1,
+  meeting: 4,
+  reporting: 5,
+  event: 1,
+  done: 6,
+  failed: 6
+};
+function missionFromSnapshot(m) {
+  if (!m) return null;
+  const terminal = m.status === "done" || m.status === "failed";
+  const outputs = m.outputs || [];
+  const outOf = s => outputs.find(o => o.agentId === s.agentId && (o.focus === s.title || o.phase === s.phase));
+  const subtasks = (m.subtasks || []).map(s => {
+    const o = outOf(s);
+    return {
+      ...s,
+      ...(s.status === "done" && o ? {
+        summary: o.summary,
+        keyPoints: o.keyPoints,
+        stance: o.stance,
+        confidence: o.confidence
+      } : {})
+    };
+  });
+  const breakdown = outputs.map(o => ({
+    agentId: o.agentId,
+    name: o.name,
+    focus: o.focus,
+    lens: o.lens,
+    stance: o.stance,
+    confidence: o.confidence,
+    confidenceBefore: o.confidenceBefore,
+    flags: o.flags,
+    simulated: o.simulated,
+    takeover: o.takeover
+  }));
+  const evidence = {};
+  for (const o of outputs) if (o.agentId && (o.toolCalls || []).length) evidence[o.agentId] = o.toolCalls.map(tc => ({
+    server: tc.server,
+    tool: tc.tool,
+    args: tc.args,
+    result: tc.result
+  }));
+  return {
+    id: m.id,
+    title: m.title,
+    phase: PHASE_MAP[m.status] || "planning",
+    done: terminal,
+    failed: m.status === "failed",
+    stage: STAGE_MAP[m.status] ?? 0,
+    hadDebate: !!m.meeting,
+    clarifyQuestion: m.clarifyQuestion || null,
+    simulated: outputs.some(o => o.simulated),
+    depth: m.depth || "quick",
+    scenarios: m.scenarios && m.scenarios.scenarios ? m.scenarios.scenarios : null,
+    sensitivity: m.scenarios ? m.scenarios.sensitivity : null,
+    subtasks,
+    evidence,
+    phases: (m.phases || []).map(p => ({ index: p.index, goal: p.goal, summary: p.synthesis?.phaseSummary || "", sufficient: !!p.synthesis?.sufficient, concerns: p.synthesis?.concerns || [] })),
+    evaluations: m.evaluations || [],
+    fragility: m.fragility || m.meeting?.fragility || null,
+    decision: m.decision || m.meeting?.decision || null,
+    meeting: m.meeting ? {
+      turns: m.meeting.transcript || [],
+      decision: m.meeting.decision,
+      rationale: m.meeting.rationale,
+      conditions: m.meeting.conditions || [],
+      fragility: m.meeting.fragility || null
+    } : null,
+    report: m.report ? {
+      markdown: m.report.markdown,
+      recommendation: m.report.recommendation,
+      confidence: m.report.confidence,
+      confidenceRationale: m.report.confidenceRationale,
+      breakdown
+    } : null
+  };
+}
 export default function App() {
   const [user, setUser] = React.useState(session.user);
   const [onboard, setOnboard] = React.useState(false);
@@ -59,6 +153,15 @@ export default function App() {
     unread: 0
   });
   const [inboxOpenId, setInboxOpenId] = React.useState(null);
+  const [toasts, setToasts] = React.useState([]);
+  const toastSeq = React.useRef(0);
+  const dismissToast = React.useCallback(id => setToasts(t => t.filter(x => x.id !== id)), []);
+  const toast = React.useCallback((msg, kind = "info") => {
+    if (!msg) return;
+    const id = ++toastSeq.current;
+    setToasts(t => [...t.slice(-3), { id, msg, kind }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4200);
+  }, []);
   const loadBriefings = React.useCallback(() => {
     api.briefings().then(b => setBriefings(b || {
       briefings: [],
@@ -96,6 +199,13 @@ export default function App() {
   React.useEffect(() => {
     missionRef.current = mission;
   }, [mission]);
+  const decideApproval = React.useCallback(decision => {
+    const m = missionRef.current;
+    if (!m || !m.pendingApproval) return;
+    const approvalId = m.pendingApproval.approvalId;
+    setMission(cur => cur && cur.pendingApproval && cur.pendingApproval.approvalId === approvalId ? { ...cur, pendingApproval: null } : cur);
+    api.approveMission(m.id, approvalId, decision).catch(() => toast("Approval failed", "warn"));
+  }, [toast]);
   React.useEffect(() => {
     const onKey = e => {
       if (e.key !== "Escape") return;
@@ -139,7 +249,7 @@ export default function App() {
       if (!terminal && !m.report) return false;
       const report = m.report ? m.report.breakdown ? m.report : {
         ...m.report,
-        breakdown: (m.outputs || []).filter(o => o.role !== "reporter")
+        breakdown: (m.outputs || [])
       } : null;
       setMission(cur => {
         if (!cur || cur.id !== id) return cur;
@@ -183,13 +293,14 @@ export default function App() {
       clearTimeout(t0);
     };
   }, [mission?.id, mission?.done, mission?.report, mission?.failed]);
-  const log = React.useCallback((agentId, text) => {
+  const log = React.useCallback((agentId, text, kind = "mission") => {
     const w = worldRef.current;
     setFeed(f => [{
       id: ++__logSeq,
       time: w ? w.clockText() : "",
       agentId,
-      text
+      text,
+      kind
     }, ...f].slice(0, 120));
   }, []);
   React.useEffect(() => {
@@ -202,7 +313,7 @@ export default function App() {
         if (ev.kind === "huddle") {
           const names = ev.agents.map(id => (AS.AGENTS.find(a => a.id === id) || {}).name).join(", ");
           const place = AS.PLACES[ev.place];
-          log(ev.agents[0], `${names} are having a side chat at ${place.label}`);
+          log(ev.agents[0], `${names} are having a side chat at ${place.label}`, "ambient");
           return;
         }
         const def = AS.AGENTS.find(a => a.id === ev.agentId);
@@ -215,7 +326,7 @@ export default function App() {
           log(ev.agentId, `${def.name} is back online ✓`);
         } else {
           const part = AMBIENT_LOG[ev.kind];
-          if (part) log(ev.agentId, `${def.name} ${part}`);
+          if (part) log(ev.agentId, `${def.name} ${part}`, "ambient");
         }
       }
     });
@@ -246,22 +357,51 @@ export default function App() {
       world.destroy();
     };
   }, []);
+  const wsDownRef = React.useRef(false);
   React.useEffect(() => {
     if (!user) return;
     const conn = connectEvents({
       onEvent: ev => driverRef.current && driverRef.current(ev),
-      onStatus: s => setConnected(s === "open")
+      onStatus: s => {
+        const open = s === "open";
+        setConnected(open);
+        if (open && wsDownRef.current) {
+          wsDownRef.current = false;
+          toast(AS.STR.toast.reconnected, "ok");
+        } else if (!open && !wsDownRef.current) {
+          wsDownRef.current = true;
+          toast(AS.STR.toast.reconnecting, "warn");
+        }
+      }
     });
     return () => conn.close();
-  }, [user]);
+  }, [user, toast]);
+  React.useEffect(() => {
+    if (!user || !squadLoaded || missionRef.current) return;
+    let dead = false;
+    api.listMissions().then(list => {
+      if (dead || missionRef.current) return null;
+      const active = (list || []).find(m => m.status !== "done" && m.status !== "failed");
+      return active ? api.getMission(active.id) : null;
+    }).then(full => {
+      if (dead || missionRef.current || !full) return;
+      setMission(missionFromSnapshot(full));
+      setPanel("mission");
+      log("atlas", `Restored your mission in progress: “${full.title}”`);
+      toast(AS.STR.toast.restored, "info");
+    }).catch(() => {});
+    return () => {
+      dead = true;
+    };
+  }, [user, squadLoaded, log, toast]);
   React.useEffect(() => {
     if (!user) return;
     let dead = false;
     (async () => {
       const out = {};
-      for (const a of AS.AGENTS) {
+      for (const role of [...new Set(AS.AGENTS.map(a => a.policyRole || "worker"))]) {
         try {
-          out[a.agentRole] = await api.grants(a.agentRole);
+          out[role] = await api.grants(role);
         } catch {}
       }
       if (!dead) setGrantsByRole(out);
@@ -276,14 +416,37 @@ export default function App() {
     const iv = setInterval(loadBriefings, 60_000);
     return () => clearInterval(iv);
   }, [user, loadBriefings]);
+  const doneToastRef = React.useRef(null);
   React.useEffect(() => {
-    if (mission?.done) loadBriefings();
-  }, [mission?.done, loadBriefings]);
-  const startMission = React.useCallback(async title => {
-    await api.startMission(title);
+    if (!mission?.done) return;
+    loadBriefings();
+    if (doneToastRef.current !== mission.id) {
+      doneToastRef.current = mission.id;
+      toast(mission.failed ? AS.STR.toast.failed : AS.STR.toast.done, mission.failed ? "warn" : "ok");
+    }
+  }, [mission?.done, mission?.failed, mission?.id, loadBriefings, toast]);
+  const startMission = React.useCallback(async (title, depth) => {
+    const resp = await api.startMission(title, depth);
     setSelectedAgent(null);
     setPanel("mission");
-  }, []);
+    if (resp && resp.id) {
+      setMission(cur => cur && cur.id === resp.id ? cur : {
+        id: resp.id,
+        title: resp.title || title,
+        depth: depth === "deep" ? "deep" : "quick",
+        phase: resp.status === "running" ? "planning" : "queued",
+        queued: resp.queued ?? 0,
+        done: false,
+        failed: false,
+        stage: 0,
+        hadDebate: false,
+        subtasks: [],
+        meeting: null,
+        report: null
+      });
+      toast(resp.status === "running" ? AS.STR.toast.assigned : AS.STR.toast.queued, "info");
+    }
+  }, [toast]);
   const revive = React.useCallback(id => {
     worldRef.current && worldRef.current.revive(id);
   }, []);
@@ -311,7 +474,7 @@ export default function App() {
     } catch {}
     setOnboard(false);
     setSettingsOpen(false);
-    log(null, "Squad ready — 6 agents online");
+    log(null, `Squad ready — ${AS.AGENTS.length} agents online`);
   };
   const onLogin = React.useCallback((token, u) => {
     session.save(token, u);
@@ -321,12 +484,18 @@ export default function App() {
   const onLogout = React.useCallback(() => {
     session.clear();
     setUser(null);
+    setMission(null);
     setPanel(null);
     setSelectedAgent(null);
     setSettingsOpen(false);
     setOnboard(false);
     setSquadLoaded(false);
   }, []);
+  React.useEffect(() => {
+    const onUnauth = () => onLogout();
+    window.addEventListener("agentsphere:unauthorized", onUnauth);
+    return () => window.removeEventListener("agentsphere:unauthorized", onUnauth);
+  }, [onLogout]);
   const dockSelect = id => {
     setSelectedAgent(null);
     setPanel(p => p === id ? null : id);
@@ -343,9 +512,9 @@ export default function App() {
   };
   const downId = Object.keys(agentStates).find(id => agentStates[id].state === "down" || agentStates[id].state === "reviving");
   const selectedDef = selectedAgent ? AS.AGENTS.find(a => a.id === selectedAgent) : null;
-  const rightContent = selectedAgent ? <AgentPanel agentId={selectedAgent} liveState={agentStates[selectedAgent]} grants={selectedDef ? grantsByRole[selectedDef.agentRole] : null} missionId={mission ? mission.id : null} onClose={closeAgent} onLocate={locate} onRevive={revive} onAssignMission={async text => {
-    closeAgent();
+  const rightContent = selectedAgent ? <AgentPanel agentId={selectedAgent} liveState={agentStates[selectedAgent]} grants={selectedDef ? grantsByRole[selectedDef.policyRole || "worker"] : null} missionId={mission ? mission.id : null} onClose={closeAgent} onLocate={locate} onRevive={revive} onAssignMission={async text => {
     await startMission(text);
+    closeAgent();
   }} onOpenLead={() => openAgent("atlas")} /> : panel === "activity" ? <ActivityFeed items={feed} onClose={() => setPanel(null)} onAgent={openAgent} /> : panel === "agents" ? <AgentDashboard states={agentStates} onClose={() => setPanel(null)} onAgent={openAgent} /> : panel === "inbox" ? <InboxPanel briefings={briefings.briefings} onClose={() => setPanel(null)} onMarkAllRead={() => {
     api.markBriefingsRead().catch(() => {});
     setBriefings(b => ({
@@ -355,14 +524,15 @@ export default function App() {
   }} onOpenMission={id => {
     setInboxOpenId(id);
     setPanel("tasks");
-  }} /> : panel === "tasks" ? <TasksPanel liveMission={mission} autoOpenId={inboxOpenId} onClose={() => {
+  }} onCompose={() => setPanel("mission")} /> : panel === "tasks" ? <TasksPanel liveMission={mission} autoOpenId={inboxOpenId} onCompose={() => setPanel("mission")} onClose={() => {
     setPanel(null);
     setInboxOpenId(null);
-  }} /> : panel === "mission" ? <MissionPanel mission={mission} compose={composeIntent} onComposeChange={setComposeIntent} onClose={() => setPanel(null)} onAssign={startMission} onSteer={(id, text) => api.steerMission(id, text).catch(() => {})} /> : null;
+  }} /> : panel === "mission" ? <MissionPanel mission={mission} compose={composeIntent} onComposeChange={setComposeIntent} onClose={() => setPanel(null)} onAssign={startMission} onToast={toast} onSteer={(id, text) => api.steerMission(id, text).catch(() => toast(AS.STR.toast.assignFailed, "warn"))} /> : null;
   const showApp = user && squadLoaded && !onboard && !settingsOpen;
   return <div>
       <canvas id="world-canvas" ref={canvasRef}></canvas>
       <div className="as-root">
+        <Toaster toasts={toasts} onDismiss={dismissToast} />
         {!user && <Login onLogin={onLogin} />}
         {showApp && <TopBar clock={clock} worldName={AS.STR.worldName} onlineCount={AS.AGENTS.length} connected={connected} onSetup={() => setSettingsOpen(true)} user={user} onLogout={onLogout} />}
         {showApp && mission && !selectedAgent && panel !== "mission" && <MissionPill mission={mission} onClick={() => {
@@ -371,6 +541,20 @@ export default function App() {
         setPanel("mission");
       }} />}
         {showApp && downId && <IncidentPill agentId={downId} state={agentStates[downId].state} offset={mission && !selectedAgent && panel !== "mission" ? 1 : 0} onRevive={revive} onOpen={openAgent} onLocate={locate} />}
+        {showApp && mission && mission.pendingApproval && (() => {
+        const pa = mission.pendingApproval;
+        const who = (AS.AGENTS.find(a => a.id === pa.agentId) || {}).name || pa.agentId;
+        return <div style={{ position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 9999, background: "#1b1f2aee", color: "#fff", border: "1px solid #f5a623", borderRadius: 12, padding: "12px 16px", boxShadow: "0 8px 28px #0009", display: "flex", gap: 14, alignItems: "center", maxWidth: 600, backdropFilter: "blur(8px)" }}>
+            <div style={{ fontSize: 13, lineHeight: 1.45 }}>
+              <div style={{ fontWeight: 700, color: "#f5a623", marginBottom: 2 }}>⏸ Approval needed</div>
+              <div><strong>{who}</strong> wants to run <code style={{ background: "#0004", padding: "1px 6px", borderRadius: 4 }}>{pa.tool}</code>{pa.summary ? <span style={{ opacity: 0.8 }}> — {pa.summary}</span> : null}</div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => decideApproval("allow")} style={{ background: "#2ecc71", color: "#06210f", border: 0, borderRadius: 8, padding: "8px 15px", fontWeight: 700, cursor: "pointer" }}>Approve</button>
+              <button onClick={() => decideApproval("deny")} style={{ background: "#e74c3c", color: "#fff", border: 0, borderRadius: 8, padding: "8px 15px", fontWeight: 700, cursor: "pointer" }}>Deny</button>
+            </div>
+          </div>;
+      })()}
         {showApp && rightContent}
         {showApp && <VerdictReveal verdict={verdict} onDismiss={() => setVerdict(null)} />}
         {showApp && <ZoomControls onZoom={zoom} />}

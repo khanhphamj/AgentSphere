@@ -1,4 +1,5 @@
 import { WebSocketServer } from "ws";
+import { eventStore } from "./db.js";
 const buffers = new Map();
 const owners = new Map();
 let wss = null;
@@ -11,21 +12,25 @@ export function attach(server) {
     server,
     path: "/events"
   });
-  wss.on("connection", (ws, req) => {
+  wss.on("connection", async (ws, req) => {
     ws.isAlive = true;
     ws.on("pong", () => {
       ws.isAlive = true;
     });
+    ws.on("error", () => {});
     const url = new URL(req.url, "http://x");
     const missionId = url.searchParams.get("missionId");
-    ws.userEmail = (url.searchParams.get("u") || "").toLowerCase().trim() || null;
-    if (missionId && buffers.has(missionId)) {
+    ws.userEmail = (req.headers["x-user-email"] || "").toString().toLowerCase().trim() || null;
+    if (missionId && ws.userEmail) {
       const owner = owners.get(missionId);
-      if (!owner || !ws.userEmail || owner === ws.userEmail) {
-        for (const ev of buffers.get(missionId)) ws.send(JSON.stringify(ev));
+      if (owner && owner === ws.userEmail) {
+        const persisted = await eventStore.list(missionId);
+        const replay = persisted.length ? persisted : buffers.get(missionId) || [];
+        for (const ev of replay) {
+          if (ws.readyState === 1) ws.send(JSON.stringify(ev));
+        }
       }
     }
-    ws.on("error", () => {});
   });
   const heartbeat = setInterval(() => {
     for (const ws of wss.clients) {
@@ -52,16 +57,20 @@ export function emit(missionId, type, payload = {}) {
   if (!buffers.has(missionId)) buffers.set(missionId, []);
   buffers.get(missionId).push(ev);
   if (buffers.size > 30) buffers.delete(buffers.keys().next().value);
+  eventStore.add(ev);
   if (wss) {
     const data = JSON.stringify(ev);
     const owner = owners.get(missionId);
     for (const client of wss.clients) {
       if (client.readyState !== 1) continue;
-      if (owner && client.userEmail && owner !== client.userEmail) continue;
+      if (!owner || !client.userEmail || owner !== client.userEmail) continue;
       client.send(data);
     }
   }
   console.log(`[orchestrator] ${type}${payload.agentId ? ` · ${payload.agentId}` : ""}`);
   return ev;
 }
-export const timeline = missionId => buffers.get(missionId) || [];
+export async function timeline(missionId) {
+  const persisted = await eventStore.list(missionId);
+  return persisted.length ? persisted : buffers.get(missionId) || [];
+}

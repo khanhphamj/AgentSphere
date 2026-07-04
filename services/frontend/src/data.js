@@ -43,52 +43,52 @@ export const MODELS = [
 
 export const AGENTS = [
   {
-    id: "atlas", name: "Orchestrator Agent", lead: true, role: "Orchestrator Agent",
-    provider: "qwen", model: "qwen/qwen3.7-plus", models: ["qwen/qwen3.7-plus"], agentRole: "orchestrator",
-    home: "office", desk: { x: 9, y: 7 },
+    id: "atlas", name: "Atlas", lead: true, role: "Lead orchestrator",
+    provider: "openai", model: "openai/gpt-5-mini", models: ["openai/gpt-5-mini"], agentRole: "orchestrator", policyRole: "orchestrator",
+    home: "office", desk: { x: 10, y: 14 },
     palette: { shirt: "#4D6BFE", hair: "#3A2E28", skin: "#EFC9A8" },
-    skills: ["Planning", "Task decomposition", "Routing"],
-    bio: "Coordinates the squad: receives missions, decomposes them into subtasks and routes them. Chairs the consensus meeting when stances conflict."
+    skills: ["Planning", "Phasing", "Check & synthesis"],
+    bio: "The lead. Splits a mission into phases, hands each worker a concrete focus, then after every phase checks the findings, synthesizes them, and decides whether the squad needs another phase. Writes the final report. Uses no tools itself."
   },
   {
-    id: "nova", name: "Research Agent", role: "Research Agent",
-    provider: "google", model: "google/gemma-3-27b-it", models: ["google/gemma-3-27b-it"], agentRole: "research",
-    home: "office", desk: { x: 15, y: 7 },
+    id: "nova", name: "Nova", role: "Generalist agent",
+    provider: "google", model: "google/gemma-4-31b-it", models: ["google/gemma-4-31b-it"], agentRole: "research", policyRole: "worker",
+    home: "office", desk: { x: 14, y: 14 },
     palette: { shirt: "#7C5CE0", hair: "#6B4A2F", skin: "#F2D3B3" },
-    skills: ["Web research", "RAG", "Source synthesis"],
-    bio: "Gathers facts and sources for the mission. Granted web search and Knowledge Base access via its policy group."
+    skills: ["Web & sources", "Data & models", "Risk & options"],
+    bio: "A generalist worker. Takes whatever focus the lead assigns each phase — facts, numbers, risks or alternatives — with the full toolbox, builds on what teammates found, and grounds every claim."
   },
   {
-    id: "quill", name: "Analyst Agent", role: "Analyst Agent",
-    provider: "openai", model: "openai/gpt-4o-mini", models: ["openai/gpt-4o-mini"], agentRole: "analyst",
-    home: "office", desk: { x: 9, y: 11 },
+    id: "quill", name: "Quill", role: "Generalist agent",
+    provider: "qwen", model: "qwen/qwen3.6-27b", models: ["qwen/qwen3.6-27b"], agentRole: "analyst", policyRole: "worker",
+    home: "office", desk: { x: 18, y: 14 },
     palette: { shirt: "#4D6BFE", hair: "#26221F", skin: "#E8BD96" },
-    skills: ["Data analysis", "Benchmarks", "Forecasting"],
-    bio: "Turns raw findings into quantified insight: costs, benchmarks, trade-off tables. If a report has numbers, the Analyst touched it."
+    skills: ["Web & sources", "Data & models", "Risk & options"],
+    bio: "A generalist worker. Takes whatever focus the lead assigns each phase, runs in parallel with the squad, and exchanges notes with teammates before finalizing its conclusion."
   },
   {
-    id: "lumi", name: "Critic Agent", role: "Critic Agent",
-    provider: "minimax", model: "minimax/minimax-m2.5", models: ["minimax/minimax-m2.5"], agentRole: "critic",
-    home: "office", desk: { x: 21, y: 7 },
+    id: "lumi", name: "Lumi", role: "Generalist agent",
+    provider: "qwen", model: "qwen/qwen3.7-plus", models: ["qwen/qwen3.7-plus"], agentRole: "critic", policyRole: "worker",
+    home: "office", desk: { x: 10, y: 18 },
     palette: { shirt: "#0FA47F", hair: "#4A3B66", skin: "#F4D8BE" },
-    skills: ["Risk review", "Precedents", "Devil's advocacy"],
-    bio: "Finds what could go wrong: risks, hidden costs, failed precedents. Adversarial but fair — moves when the argument warrants it."
+    skills: ["Web & sources", "Data & models", "Risk & options"],
+    bio: "A generalist worker. Equally at home gathering evidence, stress-testing risks, or quantifying trade-offs — whatever the phase's focus calls for."
   },
   {
-    id: "echo", name: "Creative Agent", role: "Creative Agent",
-    provider: "qwen", model: "qwen/qwen3-5-27b", models: ["qwen/qwen3-5-27b"], agentRole: "creative",
-    home: "office", desk: { x: 15, y: 11 },
+    id: "echo", name: "Echo", role: "Generalist agent",
+    provider: "openai", model: "openai/gpt-5-nano", models: ["openai/gpt-5-nano"], agentRole: "creative", policyRole: "worker",
+    home: "office", desk: { x: 14, y: 18 },
     palette: { shirt: "#2563EB", hair: "#7A2E45", skin: "#EFC9A8" },
-    skills: ["Alternatives", "Reframing", "Ideation"],
-    bio: "Proposes paths the squad hasn't considered: different approaches, phased routes, adjacent opportunities."
+    skills: ["Web & sources", "Data & models", "Risk & options"],
+    bio: "A generalist worker. Picks up any assignment the lead hands out, reads the shared blackboard, and reconciles with peers before concluding."
   },
   {
-    id: "pixel", name: "Reporter Agent", role: "Reporter Agent",
-    provider: "google", model: "google/gemma-4-31b-it", models: ["google/gemma-4-31b-it"], agentRole: "reporter",
-    home: "office", desk: { x: 21, y: 11 },
+    id: "pixel", name: "Pixel", role: "Generalist agent",
+    provider: "minimax", model: "minimax/minimax-m2.5", models: ["minimax/minimax-m2.5"], agentRole: "reporter", policyRole: "worker",
+    home: "office", desk: { x: 18, y: 18 },
     palette: { shirt: "#1F8A48", hair: "#1F1B18", skin: "#E8BD96" },
-    skills: ["Consolidation", "Reporting", "Clear writing"],
-    bio: "Consolidates the squad's work into one final report: TL;DR, findings, analysis, risks and a single clear recommendation."
+    skills: ["Web & sources", "Data & models", "Risk & options"],
+    bio: "A generalist worker. Takes whatever focus the lead assigns each phase and grounds every figure and source in a real tool result."
   }
 ];
 
@@ -99,16 +99,18 @@ export const TEAMS = [
 ];
 
 export const PLACES = {
-  office: { label: "The Loop — HQ ring", door: { x: 18, y: 19 } },
-  courtyard: { label: "Office lounge", door: { x: 18, y: 18 }, spots: [{ x: 9, y: 17 }, { x: 13, y: 17 }, { x: 17, y: 17 }, { x: 21, y: 17 }, { x: 15, y: 18 }] },
-  gym: { label: "GreenNode Gym", door: { x: 46, y: 15 }, spots: [{ x: 39, y: 9, ex: "pullup" }, { x: 43, y: 9, ex: "bench" }, { x: 49, y: 9, ex: "run" }, { x: 51, y: 9, ex: "run" }, { x: 41, y: 12, ex: "pushup" }, { x: 44, y: 12, ex: "pushup" }, { x: 54, y: 9, ex: "weights" }] },
-  pool: { label: "Swimming pool", door: { x: 27, y: 38 }, spots: [{ x: 26, y: 41 }, { x: 28, y: 42 }, { x: 29, y: 40 }, { x: 26, y: 43 }, { x: 30, y: 41 }] },
-  library: { label: "Library", door: { x: 11, y: 35 } },
-  cafe: { label: "Food hall", door: { x: 30, y: 33 }, spots: [{ x: 39, y: 28 }, { x: 42, y: 28 }, { x: 41, y: 30 }, { x: 44, y: 29 }, { x: 40, y: 32 }] },
-  park: { label: "Lake & trail", door: { x: 15, y: 37 }, spots: [{ x: 8, y: 41 }, { x: 13, y: 38 }, { x: 18, y: 38 }, { x: 22, y: 41 }, { x: 15, y: 45 }] },
-  court: { label: "Basketball court", door: { x: 51, y: 25 }, spots: [{ x: 49, y: 28 }, { x: 53, y: 30 }, { x: 51, y: 28 }, { x: 54, y: 31 }, { x: 50, y: 31 }] },
-  field: { label: "VNG football pitch", door: { x: 45, y: 34 }, spots: [{ x: 45, y: 38 }, { x: 50, y: 40 }, { x: 55, y: 37 }, { x: 47, y: 42 }, { x: 52, y: 38 }] },
-  meeting: { label: "Meeting room", door: { x: 26, y: 16 }, spots: [{ x: 25, y: 12 }, { x: 27, y: 12 }, { x: 25, y: 14 }, { x: 27, y: 14 }, { x: 26, y: 12 }, { x: 26, y: 15 }] }
+  office: { label: "Văn Phòng 02 — The Loop", door: { x: 15, y: 22 } },
+  courtyard: { label: "Seating Area", door: { x: 31, y: 13 }, spots: [{ x: 30, y: 16 }, { x: 32, y: 16 }, { x: 30, y: 19 }, { x: 32, y: 19 }, { x: 31, y: 20 }] },
+  atrium: { label: "Atrium", door: { x: 41, y: 12 }, spots: [{ x: 40, y: 16 }, { x: 43, y: 16 }, { x: 40, y: 18 }, { x: 43, y: 18 }, { x: 41, y: 19 }, { x: 42, y: 14 }] },
+  lobby: { label: "Main Lobby", door: { x: 44, y: 29 }, spots: [{ x: 41, y: 27 }, { x: 43, y: 27 }, { x: 46, y: 27 }, { x: 42, y: 28 }, { x: 45, y: 26 }] },
+  cafe: { label: "Pantry", door: { x: 54, y: 16 }, spots: [{ x: 55, y: 17 }, { x: 56, y: 17 }, { x: 57, y: 17 }, { x: 55, y: 18 }] },
+  gym: { label: "Phòng Đa Năng — Gym", door: { x: 54, y: 26 }, spots: [{ x: 56, y: 24, ex: "pullup" }, { x: 57, y: 26, ex: "bench" }, { x: 55, y: 26, ex: "run" }, { x: 56, y: 27, ex: "weights" }, { x: 55, y: 28, ex: "pushup" }] },
+  pool: { label: "Swimming Pool", door: { x: 59, y: 13 }, spots: [{ x: 55, y: 12 }, { x: 58, y: 12 }, { x: 53, y: 6 }, { x: 61, y: 8 }] },
+  park: { label: "Cây Lộc Vừng", door: { x: 5, y: 28 }, spots: [{ x: 4, y: 24 }, { x: 7, y: 24 }, { x: 4, y: 27 }, { x: 7, y: 27 }] },
+  store: { label: "7-Eleven", door: { x: 8, y: 26 }, spots: [{ x: 9, y: 26 }, { x: 10, y: 25 }] },
+  game: { label: "Game Corner", door: { x: 41, y: 10 }, spots: [{ x: 37, y: 9 }, { x: 39, y: 9 }, { x: 41, y: 9 }, { x: 43, y: 9 }, { x: 45, y: 9 }] },
+  court: { label: "Basketball", door: { x: 6, y: 38 }, spots: [{ x: 5, y: 35 }, { x: 8, y: 36 }, { x: 6, y: 37 }] },
+  meeting: { label: "Meeting Room", door: { x: 39, y: 7 }, spots: [{ x: 37, y: 5 }, { x: 41, y: 5 }, { x: 37, y: 6 }, { x: 38, y: 6 }, { x: 40, y: 6 }, { x: 41, y: 6 }] }
 };
 
 export const AMBIENT_CHAT = [
@@ -139,30 +141,47 @@ export const HUDDLES = [
     "I'll send you my benchmark notes later.",
     "Deal. This coffee has dense embeddings."
   ] },
-  { places: ["park", "courtyard"], lines: [
-    "A lap around the lake to cool the temperature.",
+  { places: ["courtyard"], lines: [
+    "These sofas beat any standing desk.",
     "Good call. My context is almost full.",
     "A quick compaction after this and I'm fresh.",
-    "This lake fine-tunes the soul."
+    "The atrium tree fine-tunes the soul."
   ] },
-  { places: ["field", "court"], lines: [
-    "Pass it here! We're winning this one.",
-    "That shot… we may need to retrain you.",
-    "Blame the gradients, not me.",
-    "One more match, then back to deploys."
+  { places: ["atrium", "lobby"], lines: [
+    "Have you seen the lộc vừng blooming?",
+    "Pink tassels everywhere — great photo op.",
+    "The skylight makes the island tree glow.",
+    "One more lap, then back to deploys."
   ] },
-  { places: ["meeting"], lines: [
+  { places: ["lobby"], lines: [
     "Quick five-minute sync on the subtasks.",
     "OK. I'm stuck on the schema bit.",
     "I'll reshare the architecture doc.",
     "With the doc it's a quick fix. Thanks!"
   ] },
-  { places: ["cafe", "park"], lines: [
+  { places: ["cafe", "lobby"], lines: [
     "This sprint is intense. Fun though.",
     "Yeah — as long as we're under token budget.",
     "The Critic's been razor-sharp lately.",
     "That's how the good calls get made."
   ] }
+];
+
+export const AMBIENT_DUO = [
+  ["Cà phê pantry không?", "5 phút nữa nhé."],
+  ["Demo hồi nãy mượt thật.", "Nhờ retry logic đó."],
+  ["Atrium hôm nay mát ghê.", "Cây lộc vừng ra hoa kìa."],
+  ["Trưa nay ghé 7-Eleven nha?", "Ok, tiện lấy thêm cà phê sữa."],
+  ["P95 sáng nay còn 140ms.", "Đẹp. Giữ vậy tới lúc release nhé."],
+  ["Game Corner làm ván không?", "Thua thì dọn blackboard đó nha."],
+  ["Hồ bơi giờ này vắng lắm.", "Tan ca mình bơi vài vòng đi."],
+  ["Token budget tháng này sao rồi?", "Còn dư 12% — thoải mái."],
+  ["Mission sáng chạy ổn không?", "Một phase là xong, lead khen nữa."],
+  ["Benchmark mới vừa drop đó.", "Để mình chạy thử trên staging."],
+  ["Ghế seating area êm thiệt.", "Ngồi đây compact context là khỏe liền."],
+  ["Chiều đi gym không?", "Giữ giùm mình cái treadmill nhé."],
+  ["Lobby treo chữ WE ARE VNG đỏ rực kìa.", "Chụp một tấm làm avatar thôi."],
+  ["Web search hôm nay lẹ ghê.", "Cache vừa được warm lại đó."]
 ];
 
 export const CRASH_ERRORS = [
@@ -184,6 +203,7 @@ export const STR = {
     agents: "Agents",
     activity: "Activity",
     tasks: "Missions",
+    inbox: "Inbox",
     mission: "New task"
   },
   status: {
@@ -199,19 +219,38 @@ export const STR = {
     agents: "Agent dashboard",
     activity: "Live activity",
     mission: "New task",
-    missionDesc: "Hỏi một câu hỏi hoặc nêu một quyết định. Squad 6 chuyên gia sẽ nghiên cứu, tranh luận và trả về MỘT khuyến nghị rõ ràng kèm độ tin cậy + nguồn.",
-    missionPh: "vd: Công ty có nên chuyển sang remote-first không?",
-    missionExamples: ["Công ty có nên chuyển sang remote-first không?", "Các mô hình LLM mã nguồn mở tốt nhất hiện nay?", "Rủi ro khi dồn ngân sách vào một sản phẩm AI?", "Nên tự xây hệ thanh toán hay mua giải pháp có sẵn?"],
-    composeHint: "Gợi ý — bấm để dùng",
+    missionDesc: "Ask a question or state a decision. The Orchestrator splits the work into phases, the agents run in parallel and exchange information, then return ONE clear recommendation with confidence + sources.",
+    missionPh: "e.g. Should the company go remote-first?",
+    missionExamples: ["Should the company go remote-first?", "What are the best open-source LLMs right now?", "Risks of betting the budget on one AI product?", "Build our own payments or buy a solution?"],
+    composeHint: "Suggestions — tap to use",
     composeHelp: {
-      title: "Cách hoạt động",
-      steps: ["Nêu một câu hỏi hoặc một quyết định cần đưa ra.", "Squad lập kế hoạch → nghiên cứu → rà soát → tranh luận → viết báo cáo (vài phút).", "Bạn nhận MỘT khuyến nghị rõ ràng kèm độ tin cậy và nguồn thật."],
-      keys: "Enter để gửi · Shift+Enter để xuống dòng",
-      dismiss: "Đã hiểu"
+      title: "How it works",
+      steps: ["State a question or a decision to make.", "The lead splits the work into phases → agents run in parallel & exchange notes → the lead checks and synthesizes → (a debate if stances conflict) → report (a few minutes).", "You get ONE clear recommendation with a confidence level and real sources."],
+      keys: "Enter to send · Shift+Enter for a new line",
+      dismiss: "Got it"
     },
     missionGo: "Assign to squad",
     missionActive: "Mission in progress",
     missionDone: "Mission complete",
+    queued: "Waiting in line — received, will run as soon as a slot opens",
+    queuedAt: "Waiting for a slot",
+    queuePos: "position",
+    retry: "Retry",
+    copyReport: "Copy",
+    downloadReport: "Download .md",
+    deepDive: "Deep-dive",
+    deepDiveHint: "Deeper research + scenario simulation + a roadmap proposal (takes longer)",
+    deepBadge: "Deep-dive",
+    scenariosTitle: "Simulated scenarios",
+    sensitivityLabel: "Most sensitive to",
+    qualityCheck: "Quality check",
+    qualitySufficient: "Sufficient quality to conclude",
+    qualityRefined: "strengthened before concluding",
+    qualityPass: "review pass(es)",
+    phaseSynthesis: "Phase synthesis",
+    phaseWord: "phase(s)",
+    concernsLabel: "to watch",
+    evaluating: "Checking whether the information is sufficient…",
     reportReady: "Report ready — conclusion first",
     subtasks: "Subtasks",
     expandAll: "Expand all",
@@ -223,10 +262,10 @@ export const STR = {
     meeting: "Consensus meeting",
     meetingNote: "Stances conflicted — the squad debates before concluding.",
     stageCaption: {
-      plan: "The lead is breaking the task into subtasks.",
-      work: "Specialists are researching their subtasks in parallel.",
-      review: "Findings are being cross-checked by the lead.",
-      verify: "The critic is fact-checking claims against real sources.",
+      plan: "The lead is planning the first phase of work.",
+      work: "Workers run the phase's assignments in parallel, then compare notes.",
+      review: "The lead checks and synthesizes the phase — and decides if another is needed.",
+      verify: "The lead fact-checks the squad's claims against the gathered evidence.",
       debate: "Stances conflict — the squad debates to reach consensus.",
       report: "Writing the final recommendation, confidence and sources."
     },
@@ -265,8 +304,8 @@ export const STR = {
     longTermMem: "Long-term — accumulated lessons",
     memEmpty: "Nothing yet — forms as missions run.",
     leadCompose: "Assign a task to the squad",
-    leadHint: "You're working with the team lead. The Orchestrator decomposes the mission and routes it to the squad.",
-    viaLeadNote: "Tasks aren't assigned to individual agents. Every mission goes through the team lead for orchestration.",
+    leadHint: "You're working with the team lead. The Orchestrator plans the work in phases, gives each worker a focus, and synthesizes the results.",
+    viaLeadNote: "Tasks aren't assigned to individual agents. Every mission goes through the team lead, who decides who works on what.",
     viaLeadBtn: "Assign via team lead",
     revive: "Revive",
     revivingBtn: "Reviving…",
@@ -294,7 +333,8 @@ export const STR = {
     logout: "Log out"
   },
   onboarding: {
-    squadDesc: "Name each agent and pick the GreenNode MaaS models that power it.",
+    squadDesc: "Each agent runs a different GreenNode MaaS model for diverse perspectives. Name them and pick models as you like — all changeable later.",
+    onbNext: "Optional — click “Create squad” to use the defaults. Next step: assign your first mission.",
     modelsLive: "Enabled models loaded from your GreenNode MaaS account",
     modelsFallback: "Offline catalog — could not reach the MaaS model list",
     nameCol: "Agent name",
@@ -302,7 +342,7 @@ export const STR = {
     roleCol: "Role",
     reasoning: "reasoning",
     fast: "fast",
-    enter: "Create Squad",
+    enter: "Create squad",
     createdSquad: "Creating squad…",
     save: "Save changes",
     saving: "Saving…",
@@ -313,8 +353,21 @@ export const STR = {
     disclaimer: "AgentSphere is a simulation — agents may surprise you.",
     assigned: "Mission assigned to the squad",
     completed: "Mission complete"
+  },
+  toast: {
+    assigned: "Mission assigned to the squad",
+    queued: "Received — waiting for a slot",
+    restored: "Restored your running mission",
+    done: "Mission complete ✓",
+    failed: "Mission failed",
+    reportCopied: "Report copied (Markdown)",
+    reportDownloaded: "Report downloaded (.md)",
+    retried: "Mission re-assigned",
+    assignFailed: "Could not assign the mission",
+    reconnecting: "Connection lost — reconnecting…",
+    reconnected: "Reconnected ✓"
   }
 };
 
-export const AS_DATA = { PROVIDERS, MODELS, AGENTS, TEAMS, PLACES, AMBIENT_CHAT, AMBIENT_WORK, HUDDLES, CRASH_ERRORS, BACK_ONLINE, STR, providerOf };
+export const AS_DATA = { PROVIDERS, MODELS, AGENTS, TEAMS, PLACES, AMBIENT_CHAT, AMBIENT_WORK, AMBIENT_DUO, HUDDLES, CRASH_ERRORS, BACK_ONLINE, STR, providerOf };
 export default AS_DATA;

@@ -48,7 +48,11 @@
         },
         {
           "name": "data.simulate",
-          "description": "Run a Monte Carlo simulation (GBM, dollar-cost averaging): monthlyAmount, months, annualReturnPct, annualVolPct, initialAmount → final-value percentiles and probability of profit"
+          "description": "Monte Carlo simulation (GBM, dollar-cost averaging) for INVESTING/SAVINGS only: monthlyAmount, months, annualReturnPct, annualVolPct, initialAmount (or a real stock symbol) → final-value percentiles and probability of profit"
+        },
+        {
+          "name": "data.model",
+          "description": "General quantitative estimator for any NON-investing what-if (ROI, NPV, break-even, capacity, sizing, headcount, pricing, TCO, growth, A/B): pass drivers:[{name,base,low?,high?}] and an output formula over those names → p10/p50/p90, sensitivity ranking and an assumptions basis"
         }
       ]
     },
@@ -107,6 +111,42 @@
           "description": "Export the final report (markdown) to the workspace."
         }
       ]
+    },
+    {
+      "id": "mcp-mailbox",
+      "label": "Team mailbox",
+      "transport": "internal",
+      "url": "internal://mcp-mailbox",
+      "tools": [
+        {
+          "name": "send_message",
+          "description": "Send a direct message to a teammate by their id (e.g. nova, quill) — ask them something, hand off a sub-angle, or share a finding so they can factor it in. Params: to, body."
+        },
+        {
+          "name": "post_task",
+          "description": "Post a sub-task to the shared team board for any idle teammate to pick up later. Params: title, detail."
+        },
+        {
+          "name": "board.read",
+          "description": "Read the shared team board — the open sub-tasks and recent messages the squad has posted this mission. No params."
+        },
+        {
+          "name": "ask_peer",
+          "description": "Ask a teammate a SHORT question and wait for their answer right now, before you continue — use sparingly, only when their angle is essential to your own. Params: to, question."
+        },
+        {
+          "name": "claim_task",
+          "description": "Claim an OPEN sub-task from the shared board so you (and no one else) will do it. Read the board first with board.read to get task ids. Params: taskId."
+        },
+        {
+          "name": "complete_task",
+          "description": "Mark a sub-task you claimed as done and post your result back to the board for the squad. Params: taskId, result."
+        },
+        {
+          "name": "spawn_agent",
+          "description": "Delegate a focused sub-task to a fresh helper agent that runs its own tool loop and returns its finding to you. Use only when a sub-question is substantial enough to hand off. Params: focus, lens."
+        }
+      ]
     }
   ],
   "policyGroups": [
@@ -143,9 +183,15 @@
     },
     {
       "id": "pg-analyst",
-      "label": "Analyst — data & benchmarks",
-      "description": "Metrics, benchmarks and KB lookups. No open-web access.",
+      "label": "Analyst — data, models & benchmarks",
+      "description": "Metrics, the quantitative modeling engine, benchmarks, KB lookups and read-only web search.",
       "grants": [
+        {
+          "server": "mcp-web",
+          "tools": [
+            "web.search"
+          ]
+        },
         {
           "server": "mcp-data",
           "tools": [
@@ -223,10 +269,54 @@
           ]
         }
       ]
+    },
+    {
+      "id": "pg-worker",
+      "label": "Worker — full toolbox",
+      "description": "Generalist worker the orchestrator assigns dynamically. Full read access to every tool server so it can take on whatever focus a mission needs.",
+      "grants": [
+        {
+          "server": "mcp-web",
+          "tools": [
+            "*"
+          ]
+        },
+        {
+          "server": "mcp-knowledge",
+          "tools": [
+            "*"
+          ]
+        },
+        {
+          "server": "mcp-data",
+          "tools": [
+            "*"
+          ]
+        },
+        {
+          "server": "mcp-market",
+          "tools": [
+            "*"
+          ]
+        },
+        {
+          "server": "mcp-risk",
+          "tools": [
+            "*"
+          ]
+        },
+        {
+          "server": "mcp-mailbox",
+          "tools": [
+            "*"
+          ]
+        }
+      ]
     }
   ],
   "roleBindings": {
     "orchestrator": "pg-orchestrator",
+    "worker": "pg-worker",
     "research": "pg-research",
     "analyst": "pg-analyst",
     "critic": "pg-critic",
