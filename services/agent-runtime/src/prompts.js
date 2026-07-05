@@ -57,6 +57,7 @@ Return ONLY a JSON object:
 }
 
 const DOMAIN_RULES = [
+  [/\b(stock price|share price|exchange rate|market price|vn-?index)\b|(giá cổ phiếu|cổ phiếu|chứng khoán|tỷ giá|giá vàng)/i, "PRICE/market data: for a current or historical price, quote, index level or FX/gold rate, call market.quote (latest close + return) or market.history (daily series) — they return REAL exchange data (DNSE/Yahoo) up to today. Do NOT rely on web.search for prices — it returns stale articles. Always state the exact as-of date of the price data."],
   [/\b(law|legal|lawsuit|compliance|regulat|gdpr|contract|liability|patent|luật|pháp lý|tuân thủ|nghị định|thông tư|hợp đồng)\b/i, "LEGAL/regulatory: scope sources to the relevant jurisdiction's statutes / official gazette / regulator, cite the specific law or article, and note this is not legal advice."],
   [/\b(medical|clinical|health|drug|disease|treatment|patient|dosage|y tế|lâm sàng|sức khỏe|thuốc|bệnh|điều trị)\b/i, "MEDICAL/health: prefer peer-reviewed sources (PubMed, ClinicalTrials, WHO/CDC, clinical guidelines) over blogs, and note this is not medical advice."],
   [/\b(arxiv|scientific|physics|chemistry|biology|materials|genomics|hypothesis|peer.?review|khoa học|nghiên cứu|thí nghiệm)\b/i, "SCIENTIFIC: prefer peer-reviewed / preprint sources (arXiv, Google Scholar, journals), name the study and cite figures with their source."],

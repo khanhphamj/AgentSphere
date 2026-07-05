@@ -199,7 +199,7 @@ const hostOf = u => {
 const TAVILY_KEY = process.env.TAVILY_API_KEY || "";
 const LANGSEARCH_KEY = process.env.LANGSEARCH_API_KEY || "";
 const NOW_YEAR = new Date().getFullYear();
-const TIME_SENSITIVE = /\b(latest|recent|current|today|tonight|now|this (?:week|month|quarter|year)|past (?:week|month)|breaking|news|headline|update|live|upcoming|just (?:announced|released)|mới nhất|hiện nay|gần đây|tin tức|hôm nay|bây giờ|cập nhật|trực tiếp|sắp tới|vừa ra)\b/i;
+const TIME_SENSITIVE = /\b(latest|recent|current|today|tonight|now|this (?:week|month|quarter|year)|past (?:week|month)|breaking|news|headline|update|live|upcoming|just (?:announced|released)|stock price|share price|exchange rate)\b|(cổ phiếu|chứng khoán|tỷ giá|giá vàng|giá cổ phiếu|mới nhất|hiện nay|gần đây|tin tức|hôm nay|bây giờ|cập nhật|trực tiếp|sắp tới|vừa ra)|\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/i;
 const isTimeSensitive = q => TIME_SENSITIVE.test(String(q || ""));
 async function tavilySearch(query, timeSensitive) {
   const res = await fetch("https://api.tavily.com/search", {
