@@ -60,6 +60,14 @@ const relScore = (terms, text) => {
   for (const w of terms) if (t.includes(w)) n++;
   return n;
 };
+const rerank = (results, query) => {
+  const terms = queryTerms(query);
+  if (!terms.length || !results.length) return { results, lowRelevance: false };
+  const scored = results.map(r => ({ r, s: relScore(terms, `${r.title || ""} ${r.snippet || ""}`) })).sort((a, b) => b.s - a.s);
+  const hit = scored.filter(x => x.s >= 1);
+  if (hit.length) return { results: hit.map(x => x.r), lowRelevance: false };
+  return { results: scored.slice(0, 2).map(x => x.r), lowRelevance: true };
+};
 const isHomepage = url => {
   try {
     return new URL(url).pathname.replace(/\/+$/, "") === "";
@@ -218,7 +226,8 @@ async function tavilySearch(query, timeSensitive) {
   }));
   if (!results.length) throw new Error("Tavily returned no usable results");
   const bestScore = clean[0]?.score ?? 0;
-  return { query, source: timeSensitive ? "Tavily news API (real-time, last ~14 days)" : "Tavily search API (real results)", answer: json.answer ? String(json.answer).slice(0, 600) : null, lowRelevance: !json.answer && bestScore < 0.3, results };
+  const rr = rerank(results, query);
+  return { query, source: timeSensitive ? "Tavily news API (real-time, last ~14 days)" : "Tavily search API (real results)", answer: json.answer ? String(json.answer).slice(0, 600) : null, lowRelevance: rr.lowRelevance || (!json.answer && bestScore < 0.3), results: rr.results };
 }
 async function langSearch(query, timeSensitive) {
   const res = await fetch("https://api.langsearch.com/v1/web-search", {
@@ -242,9 +251,8 @@ async function langSearch(query, timeSensitive) {
     content: String(r.summary || r.snippet || "").replace(/\s+/g, " ").trim().slice(0, 3000)
   }));
   if (!results.length) throw new Error("LangSearch returned no usable results");
-  const terms = queryTerms(query);
-  const relevant = results.filter(r => relScore(terms, `${r.title} ${r.snippet}`) >= 2);
-  return { query, source: timeSensitive ? "LangSearch web API (real-time, full summaries)" : "LangSearch web API (real results, full summaries)", answer: null, lowRelevance: relevant.length === 0, results };
+  const rr = rerank(results, query);
+  return { query, source: timeSensitive ? "LangSearch web API (real-time, full summaries)" : "LangSearch web API (real results, full summaries)", answer: null, lowRelevance: rr.lowRelevance, results: rr.results };
 }
 
 function historyStats(symbol, closes, lastTs, source, months) {
@@ -692,9 +700,10 @@ async function deepenSearch(query, base) {
       const refined = `${query} ${NOW_YEAR} detailed report official source`.replace(/\s+/g, " ").trim().slice(0, 380);
       const alt = await _rawWebSearch({ query: refined });
       if (alt && !alt.error) {
-        for (const r of alt.results || []) { const h = hostOf(r.url); if (h && !seenHosts.has(h)) { seenHosts.add(h); seenUrls.add(r.url); results.push(r); } }
+        let merged = 0;
+        for (const r of alt.results || []) { const h = hostOf(r.url); if (h && !seenHosts.has(h) && relScore(terms, `${r.title || ""} ${r.snippet || ""}`) >= 1) { seenHosts.add(h); seenUrls.add(r.url); results.push(r); merged++; } }
         if (alt.answer && !base.answer) base.answer = alt.answer;
-        if (alt.lowRelevance === false) base.lowRelevance = false;
+        if (merged > 0) base.lowRelevance = false;
         requeried = true;
       }
     } catch {}
@@ -710,7 +719,7 @@ async function deepenSearch(query, base) {
       return { title: link.text || link.url, url: link.url, host: hostOf(link.url), published: null, snippet: text.slice(0, 240), content: text.slice(0, 3000), via: `linked from ${tgt.host || hostOf(tgt.url)}` };
     } catch { return null; }
   }));
-  for (const f of followed) if (f && !seenUrls.has(f.url)) { seenUrls.add(f.url); results.push(f); linksFollowed++; }
+  for (const f of followed) if (f && !seenUrls.has(f.url) && relScore(terms, `${f.title || ""} ${f.snippet || ""}`) >= 1) { seenUrls.add(f.url); results.push(f); linksFollowed++; }
   return { ...base, results: results.slice(0, 12), requeried, linksFollowed };
 }
 EXECUTORS["mcp-web"]["web.search"] = ({ query }) => {

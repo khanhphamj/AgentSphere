@@ -31,8 +31,8 @@ export function scenariosByCode(outputs, language) {
   };
 }
 
-const JUNK_HOST = /(^|\.)(cambridge\.org|dictionary\.com|merriam-webster\.com|thefreedictionary\.com|vocabulary\.com|wordreference\.com|collinsdictionary\.com|urbandictionary\.com|schema\.org|w3\.org|wiktionary\.org|translate\.google\.com|bing\.com|google\.com|duckduckgo\.com|op\.gg|twitch\.tv|steamcommunity\.com|quora\.com|coursehero\.com|scribd\.com|roblox\.com|robloxdatabase\.com|steampowered\.com|userbenchmark\.com|sporcle\.com|imdb\.com|apps\.apple\.com|play\.google\.com|tratu\.soha\.vn|iciba\.com|tudientiengviet\.org|piliapp\.com|myaccountingcourse\.com)$/i;
-const JUNK_PATH = /\/dictionary\/|\/dict\/|\/accounting-dictionary\/|cau-truc-|-la-gi\b|\/translate\b|\/define\b|\/spell\b|\/(sign[\- ]?in|signup|sign[\- ]?up|log[\- ]?in|login|register|account|cart|checkout|subscribe)\b/i;
+const JUNK_HOST = /(^|\.)(cambridge\.org|dictionary\.com|merriam-webster\.com|thefreedictionary\.com|vocabulary\.com|wordreference\.com|collinsdictionary\.com|urbandictionary\.com|schema\.org|w3\.org|wiktionary\.org|translate\.google\.com|bing\.com|google\.com|duckduckgo\.com|op\.gg|twitch\.tv|steamcommunity\.com|quora\.com|coursehero\.com|scribd\.com|roblox\.com|robloxdatabase\.com|steampowered\.com|userbenchmark\.com|sporcle\.com|imdb\.com|apps\.apple\.com|play\.google\.com|tratu\.soha\.vn|iciba\.com|tudientiengviet\.org|piliapp\.com|myaccountingcourse\.com|adopt\.com|discord\.com|zim\.vn)$/i;
+const JUNK_PATH = /\/dictionary\/|\/dict\/|\/anh-viet\/|\/anh-anh\/|\/accounting-dictionary\/|cau-truc-|-la-gi\b|\/translate\b|\/define\b|\/spell\b|\/(sign[\- ]?in|signup|sign[\- ]?up|log[\- ]?in|login|register|account|cart|checkout|subscribe)\b/i;
 const ADULT_JUNK = /(porn|xvideos|xnxx|xhamster|\bbokep\b|redtube|onlyfans|\bescort\b|sex-?video)/i;
 export function isJunkSource(u) {
   try {
@@ -62,7 +62,7 @@ export function buildSources(dataNotes, language, missionTitle = "") {
     if (/"lowRelevance"\s*:\s*true/.test(note)) continue;
     const noteQ = (note.match(/"query"\s*:\s*"([^"]+)"/) || [])[1];
     const terms = noteQ ? srcTerms(noteQ) : titleTerms;
-    const need = terms.length >= 2 ? 2 : 1;
+    const need = 1;
     const cand = [];
     for (const m2 of note.matchAll(/"url"\s*:\s*"(https?:\/\/[^"\\]+)"/g)) {
       const clean = m2[1].replace(/[.,;]+$/, "");

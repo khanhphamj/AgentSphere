@@ -487,12 +487,18 @@ place** instead of discarding the run:
 
 **Source & confidence hygiene (QA-hardened).** A 12-scenario end-user QA (sub-agents + codex,
 cross-reviewed) surfaced pre-existing quality gaps that are now closed:
-- **The "Real data sources" list only shows structured result URLs.** `buildSources` used to
-  regex-scrape every `http(s)://` out of the serialized tool JSON, so links buried in a result's
-  *content/snippet* (once even an adult and a gaming URL for unrelated queries) leaked in as
-  "sources". It now extracts only `"url":` values, `isJunkSource` also blocks adult/gaming/social/
-  dictionary hosts and malformed hostnames, and `web.search` no longer falls back to raw unranked
-  results when nothing scores relevant.
+- **Sources are relevance-gated at both search time and listing time.** Junk used to leak two
+  ways: `buildSources` regex-scraped every `http(s)://` out of the serialized tool JSON (so URLs
+  buried in a result's *content* — once even an adult and a gaming URL — became "sources"), and
+  the search providers returned off-topic *term-collision* results ("Rust" the game for a "Rust"
+  language query, "adopt"→a game) that only the Bing path filtered. Now (a) **every** provider
+  (`tavilySearch` / `langSearch` / `deepenSearch`, not just Bing) runs a shared `rerank` that
+  scores each result's title+snippet against the query terms and drops sub-threshold hits *before*
+  they reach the agent — with a keep-best-N fallback so cross-language/hard queries never go empty;
+  and (b) `buildSources` lists only structured `"url":` values, each scored against **its own
+  result's** title/snippet (result-scoped) vs the query, plus a proven-junk host denylist
+  (roblox/steam/dictionaries/…). Residual: a benign term-collision or tangential-sub-search link
+  can still appear; full semantic relevance is a follow-on.
 - **Confidence is recalibrated.** The disagreement penalty scales with the *margin* — a
   near-unanimous squad is barely penalized instead of a flat −8 that made an 8-of-9-agree mission
   read as 56% — and the fact-check-flag penalty scales with the *total* flag count, so one weak
