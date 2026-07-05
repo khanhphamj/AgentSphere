@@ -8,12 +8,21 @@ const DATA_FILE = path.join(__dirname, "..", "data", "registry.json");
 const PORT = Number(process.env.MCP_POLICY_PORT || 8083);
 const CLIENT_ID = process.env.CLIENT_ID || "";
 const CLIENT_SECRET = process.env.CLIENT_SECRET || "";
+if (process.env.NODE_ENV === "production" && (!CLIENT_ID || !CLIENT_SECRET)) {
+  console.error("[mcp-policy] refusing to start in production without CLIENT_ID/CLIENT_SECRET");
+  process.exit(1);
+}
 let registry = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
 function persist() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(registry, null, 2));
 }
 function internalAuth(req, res, next) {
-  if (!CLIENT_ID) return next();
+  if (!CLIENT_ID || !CLIENT_SECRET) {
+    if (process.env.NODE_ENV === "production") return res.status(503).json({
+      error: "internal auth not configured"
+    });
+    return next();
+  }
   if (req.get("x-client-id") === CLIENT_ID && req.get("x-client-secret") === CLIENT_SECRET) return next();
   res.status(401).json({
     error: "invalid client credentials"

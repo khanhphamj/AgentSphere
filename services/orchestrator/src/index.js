@@ -8,8 +8,17 @@ import { missionStore, briefingStore, configStore, standingStore, calibrationSto
 const PORT = Number(process.env.ORCHESTRATOR_PORT || 8081);
 const CLIENT_ID = process.env.CLIENT_ID || "";
 const CLIENT_SECRET = process.env.CLIENT_SECRET || "";
+if (process.env.NODE_ENV === "production" && (!CLIENT_ID || !CLIENT_SECRET)) {
+  console.error("[orchestrator] refusing to start in production without CLIENT_ID/CLIENT_SECRET");
+  process.exit(1);
+}
 function internalAuth(req, res, next) {
-  if (!CLIENT_ID) return next();
+  if (!CLIENT_ID || !CLIENT_SECRET) {
+    if (process.env.NODE_ENV === "production") return res.status(503).json({
+      error: "internal auth not configured"
+    });
+    return next();
+  }
   if (req.get("x-client-id") === CLIENT_ID && req.get("x-client-secret") === CLIENT_SECRET) return next();
   res.status(401).json({
     error: "invalid client credentials"
@@ -28,6 +37,7 @@ async function callRuntime(path, body, userEmail) {
 const missions = new Map();
 const queue = [];
 const inflight = new Map();
+const controllers = new Map();
 const GLOBAL_MAX = Math.max(1, Number(process.env.MAX_CONCURRENT_MISSIONS || 3));
 const PER_USER_MAX = Math.max(1, Number(process.env.MAX_CONCURRENT_PER_USER || 1));
 const MISSION_DEADLINE_MS = Math.max(60_000, Number(process.env.MISSION_DEADLINE_MS || 1_800_000));
@@ -41,9 +51,11 @@ function userInflight(email) {
 function startMission(m) {
   inflight.set(m.id, m.userEmail || null);
   const ac = new AbortController();
+  controllers.set(m.id, ac);
   const timer = setTimeout(() => ac.abort(new Error("mission deadline exceeded")), MISSION_DEADLINE_MS);
   runMission(m, { signal: ac.signal }).catch(err => console.error(`[orchestrator] mission ${m.id} crashed:`, err?.message || err)).finally(() => {
     clearTimeout(timer);
+    controllers.delete(m.id);
     inflight.delete(m.id);
     missionStore.save(m);
     pump();
@@ -71,7 +83,7 @@ function enqueue(id, { priority = false } = {}) {
 }
 const userOf = req => (req.get("x-user-email") || "").toLowerCase().trim() || null;
 for (const m of await missionStore.loadAll()) {
-  if (m.status !== "done" && m.status !== "failed") {
+  if (m.status !== "done" && m.status !== "failed" && m.status !== "cancelled") {
     m.status = "failed";
     missions.set(m.id, m);
     setMissionOwner(m.id, m.userEmail);
@@ -186,6 +198,42 @@ app.post("/missions/:id/steer", internalAuth, (req, res) => {
   res.json({
     ok: true,
     count: m.steers.length
+  });
+});
+const CLARIFY_TTL_MS = Math.max(300_000, Number(process.env.CLARIFY_TTL_MS || 1_800_000));
+setInterval(() => {
+  const now = Date.now();
+  for (const m of missions.values()) {
+    if (m.status === "clarifying" && m.clarifyRequestedAt && now - m.clarifyRequestedAt > CLARIFY_TTL_MS) {
+      m.status = "cancelled";
+      emit(m.id, "mission.cancelled", {});
+      missionStore.save(m);
+      briefingStore.add({ id: `b_${m.id}`, missionId: m.id, kind: "cancelled", title: `Expired — no answer: ${m.title}`, severity: "info", auto: !!m.auto, userEmail: m.userEmail || null, at: now });
+    }
+  }
+}, 300_000).unref();
+app.post("/missions/:id/cancel", internalAuth, (req, res) => {
+  const m = missions.get(req.params.id);
+  if (!m || m.userEmail !== userOf(req)) return res.status(404).json({
+    error: "not found"
+  });
+  if (m.status === "done" || m.status === "failed" || m.status === "cancelled") return res.json({
+    ok: true,
+    already: true
+  });
+  m.cancelRequested = true;
+  const qi = queue.indexOf(m.id);
+  if (qi >= 0) queue.splice(qi, 1);
+  const ac = controllers.get(m.id);
+  if (ac) {
+    ac.abort(new Error("cancelled by user"));
+  } else {
+    m.status = "cancelled";
+    emit(m.id, "mission.cancelled", {});
+    missionStore.save(m);
+  }
+  res.json({
+    ok: true
   });
 });
 app.post("/missions/:id/bus", internalAuth, async (req, res) => {

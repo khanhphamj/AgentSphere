@@ -705,6 +705,7 @@ export function createMissionDriver({
           setMission(m => m && {
             ...m,
             done: true,
+            stopped: false,
             phase: "failed"
           });
           weather("cool");
@@ -714,6 +715,23 @@ export function createMissionDriver({
           }));
           disperse();
           mascot("failed");
+          break;
+        }
+      case "mission.cancelled":
+        {
+          setMission(m => m && {
+            ...m,
+            done: true,
+            failed: false,
+            stopped: true,
+            phase: "failed"
+          });
+          weather("cool");
+          log(null, "Mission stopped");
+          AS.AGENTS.forEach(a => world.command(a.id, {
+            scripted: false
+          }));
+          disperse();
           break;
         }
       default:

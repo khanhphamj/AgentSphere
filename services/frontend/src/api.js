@@ -83,6 +83,9 @@ export const api = {
       text
     }
   }),
+  cancelMission: id => request(`/api/missions/${id}/cancel`, {
+    method: "POST"
+  }),
   approveMission: (id, approvalId, decision) => request(`/api/missions/${id}/approve`, {
     method: "POST",
     body: {

@@ -43,18 +43,40 @@ const fragilityOf = stances => {
     split: { support: S, oppose: O, conditional: C }
   };
 };
+export function computeQuorum(outputs) {
+  const list = Array.isArray(outputs) ? outputs : [];
+  const total = list.length;
+  const takenOver = list.filter(o => o && o.takeover).length;
+  const simulated = list.filter(o => o && o.simulated).length;
+  return { total, byAdvisors: total - takenOver, takenOver, simulated };
+}
 const pace = (m, ms) => sleep(m && m.auto ? 0 : Math.round(ms * 0.55));
 const firstSentence = s => String(s || "").split(/(?<=[.!?。])\s/)[0].slice(0, 200);
 async function runtime(path, body, signal, userEmail) {
-  const timeout = AbortSignal.timeout(360_000);
-  const res = await fetch(`${RUNTIME_URL}${path}`, {
-    method: "POST",
-    headers: userEmail ? { ...HEADERS, "x-user-email": userEmail } : HEADERS,
-    body: JSON.stringify(body),
-    signal: signal ? AbortSignal.any([signal, timeout]) : timeout
-  });
-  if (!res.ok) throw new Error(`${path} → ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  return res.json();
+  const backoffs = [1500, 4000];
+  for (let attempt = 0; ; attempt++) {
+    const timeout = AbortSignal.timeout(360_000);
+    let res;
+    try {
+      res = await fetch(`${RUNTIME_URL}${path}`, {
+        method: "POST",
+        headers: userEmail ? { ...HEADERS, "x-user-email": userEmail } : HEADERS,
+        body: JSON.stringify(body),
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout
+      });
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      const code = err && (err.cause && err.cause.code || err.code);
+      const retryable = err && err.name !== "TimeoutError" && ["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "EHOSTUNREACH", "UND_ERR_CONNECT_TIMEOUT"].includes(code);
+      if (retryable && attempt < backoffs.length) {
+        await sleep(backoffs[attempt]);
+        continue;
+      }
+      throw err;
+    }
+    if (!res.ok) throw new Error(`${path} → ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    return res.json();
+  }
 }
 const detectLanguage = text => /[àáảãạăâđèéẻẽẹêìíỉĩịòóỏõọôơùúủũụưỳýỷỹỵ]/i.test(text) ? "vi" : "en";
 const STATUS_TITLE = /agent unresponsive|unusable format|revive to reload|reload its checkpoint|bring the agent back online|model unreachable|model answered in an|denied by policy|superseded by a new mission|all specialists failed|all workers failed|✗|⚑|model 404|429 too many/i;
@@ -84,6 +106,38 @@ export function createMission(title) {
   };
 }
 const pick = (obj, keys) => Object.fromEntries(keys.filter(k => k in obj).map(k => [k, obj[k]]));
+function localReport(m, vi, opts = {}) {
+  const outs = (m.outputs || []).filter(o => o && !o.failed && !o.simulated);
+  if (opts.insufficient || !outs.length) return {
+    markdown: vi
+      ? "> ⚠️ **Không thể hoàn tất:** các model đều không phản hồi nên chưa có phân tích trực tiếp. Hãy chạy lại nhiệm vụ sau ít phút."
+      : "> ⚠️ **Could not complete:** every model was unreachable, so no live analysis was produced. Please retry the mission shortly.",
+    recommendation: vi ? "Chưa đủ dữ liệu để kết luận — hãy chạy lại." : "Insufficient data to conclude — please retry.",
+    confidence: 10,
+    confidenceRationale: vi ? "Không có phân tích trực tiếp nào khả dụng." : "No live analysis was available.",
+    say: vi ? "Xin lỗi, tôi chưa hoàn tất được — hãy thử lại." : "Sorry — I couldn't complete this. Please retry."
+  };
+  const tally = s => outs.filter(o => o.stance === s).length;
+  const support = tally("support"), oppose = tally("oppose"), conditional = tally("conditional");
+  const rec = oppose > support
+    ? (vi ? "Nghiêng về việc KHÔNG tiến hành." : "Leans against proceeding.")
+    : conditional >= Math.max(support, oppose)
+      ? (vi ? "Tiến hành nhưng có điều kiện." : "Proceed, with conditions.")
+      : (vi ? "Nghiêng về việc tiến hành." : "Leans toward proceeding.");
+  const confs = outs.map(o => o.confidence).filter(c => typeof c === "number");
+  const conf = Math.max(5, Math.min(90, (confs.length ? Math.round(confs.reduce((a, b) => a + b, 0) / confs.length) : 45) - 12));
+  const notes = outs.map(o => `- **${o.name} — ${o.focus}** (${o.stance || "?"}, ${o.confidence ?? "?"}%): ${firstSentence(o.summary || o.say || "")}`).join("\n");
+  const banner = vi
+    ? "> ⚠️ **Tạm thời:** báo cáo được dựng tại chỗ vì bước tổng hợp cuối không phản hồi — hãy coi là sơ bộ.\n\n"
+    : "> ⚠️ **Provisional:** this report was assembled locally because the final rendering step was unavailable — treat it as preliminary.\n\n";
+  return {
+    markdown: `${banner}## ${m.title}\n\n${rec}\n\n### Advisor notes\n${notes}`,
+    recommendation: rec,
+    confidence: conf,
+    confidenceRationale: vi ? "Dựng tại chỗ từ kết luận của các advisor." : "Assembled locally from advisor conclusions.",
+    say: vi ? "Đây là bản tổng hợp tạm thời." : "Here's a provisional synthesis."
+  };
+}
 
 export async function runMission(mission, { signal } = {}) {
   const m = mission;
@@ -126,9 +180,18 @@ export async function runMission(mission, { signal } = {}) {
     });
     await pace(m, 800);
     emit(m.id, "phase.gather", { place: "meeting" });
-    const [plan] = await Promise.all([planP, pace(m, 5000)]);
+    let plan;
+    try {
+      [plan] = await Promise.all([planP, pace(m, 5000)]);
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      console.warn(`[orchestrator] plan failed — degrading to insufficient report: ${err.message}`);
+      plan = { approach: "", phase: null, assessment: null };
+      m.insufficient = true;
+    }
     if (plan.assessment?.type === "unclear" && !m.clarifyAnswer && !m.auto) {
       m.status = "clarifying";
+      m.clarifyRequestedAt = Date.now();
       m.clarifyQuestion = plan.assessment.question;
       emit(m.id, "mission.clarify", { agentId: lead.id, question: plan.assessment.question });
       emit(m.id, "phase.disperse", {});
@@ -165,18 +228,27 @@ export async function runMission(mission, { signal } = {}) {
         language: m.language,
         ...(INTERAGENT_BUS ? { busUrl: `${SELF_URL}/missions/${m.id}/bus`, roster: squad.map(a => ({ id: a.id, name: a.name })), inbox } : {})
       };
-      let out = await rt("/run", { ...base, stage, blackboard, peerDrafts, context: m.clarifyAnswer ? `${vi ? "Người dùng làm rõ" : "The user clarified"}: ${m.clarifyAnswer}` : "" });
-      if (stage === "draft" && out.questionForLead) {
-        emit(m.id, "agent.question", { agentId: agent.id, leadId: lead.id, question: out.questionForLead });
-        await pace(m, 4000);
-        const guidance = await rt("/lead-answer", { agent: lead, missionTitle: m.title, question: out.questionForLead, language: m.language });
-        emit(m.id, "agent.answer", { agentId: lead.id, to: agent.id, answer: guidance.answer });
-        await pace(m, 2500);
-        out = await rt("/run", { ...base, stage, blackboard, context: `${m.clarifyAnswer ? `${vi ? "Người dùng làm rõ" : "The user clarified"}: ${m.clarifyAnswer}\n` : ""}${vi ? "Lead hướng dẫn" : "Lead's guidance"} ("${out.questionForLead}"): ${guidance.answer}` });
+      let out;
+      try {
+        out = await rt("/run", { ...base, stage, blackboard, peerDrafts, context: m.clarifyAnswer ? `${vi ? "Người dùng làm rõ" : "The user clarified"}: ${m.clarifyAnswer}` : "" });
+        if (stage === "draft" && out.questionForLead) {
+          emit(m.id, "agent.question", { agentId: agent.id, leadId: lead.id, question: out.questionForLead });
+          await pace(m, 4000);
+          const guidance = await rt("/lead-answer", { agent: lead, missionTitle: m.title, question: out.questionForLead, language: m.language });
+          emit(m.id, "agent.answer", { agentId: lead.id, to: agent.id, answer: guidance.answer });
+          await pace(m, 2500);
+          out = await rt("/run", { ...base, stage, blackboard, context: `${m.clarifyAnswer ? `${vi ? "Người dùng làm rõ" : "The user clarified"}: ${m.clarifyAnswer}\n` : ""}${vi ? "Lead hướng dẫn" : "Lead's guidance"} ("${out.questionForLead}"): ${guidance.answer}` });
+        }
+      } catch (e) {
+        if (signal?.aborted) throw e;
+        out = { failed: true, error: String(e.message || e).slice(0, 200) };
       }
       emitTools(agent.id, out);
       if (stage === "draft" && out.failed) {
         emit(m.id, "agent.progress", { agentId: agent.id, sub: sub.id, status: "failed", error: out.error || "model unreachable" });
+        const takeoverCap = Math.max(2, Math.round(pool.length / 2));
+        if ((m._leadTakeovers || 0) >= takeoverCap) return null;
+        m._leadTakeovers = (m._leadTakeovers || 0) + 1;
         emit(m.id, "agent.takeover", { agentId: lead.id, from: agent.id, sub: sub.id, reason: out.error || "model unreachable" });
         emit(m.id, "agent.say", { agentId: lead.id, say: vi ? `${agent.name} gặp sự cố — để tôi tiếp quản phần việc này.` : `${agent.name} hit an error — I'll take this one over.` });
         await pace(m, 2200);
@@ -184,6 +256,7 @@ export async function runMission(mission, { signal } = {}) {
         try {
           out = await rt("/run", { ...base, agent: lead, agentId: lead.id, stage, blackboard, context: `${m.clarifyAnswer ? `${vi ? "Người dùng làm rõ" : "The user clarified"}: ${m.clarifyAnswer}\n` : ""}${vi ? `Worker được giao không hoàn thành (lỗi: ${out.error || "model lỗi"}). Là lead, hãy tự làm phần việc này.` : `The assigned worker could not complete this (error: ${out.error || "model failure"}). As the lead, take it over and complete it yourself.`}` });
         } catch (e) {
+          if (signal?.aborted) throw e;
           out = { failed: true, error: String(e.message || e).slice(0, 200) };
         }
         emitTools(lead.id, out);
@@ -233,7 +306,7 @@ export async function runMission(mission, { signal } = {}) {
           if (!d.out || d.out.failed) return d;
           const peers = peerLines.filter((_, i) => live[i] !== d);
           let ex = null;
-          try { ex = await runWorker(d.sub, "exchange", blackboard, peers); } catch { ex = null; }
+          try { ex = await runWorker(d.sub, "exchange", blackboard, peers); } catch (e) { if (signal?.aborted) throw e; ex = null; }
           if (ex && !ex.failed) {
             ex._workerId = ex._workerId || d.out._workerId;
             ex._workerName = ex._workerName || d.out._workerName;
@@ -301,7 +374,7 @@ export async function runMission(mission, { signal } = {}) {
             blackboard: [...m.blackboard],
             busUrl: `${SELF_URL}/missions/${m.id}/bus`, roster: squad.map(a => ({ id: a.id, name: a.name })), inbox: []
           });
-        } catch { out = null; }
+        } catch (e) { if (signal?.aborted) throw e; out = null; }
         const result = out && !out.failed ? out.summary || out.say || "" : "(could not complete)";
         if (out && !out.failed) emitTools(worker.id, out);
         task.status = "done";
@@ -320,7 +393,8 @@ export async function runMission(mission, { signal } = {}) {
     for (let phaseIndex = 0; phaseIndex < MAX_PHASES && phaseSpec && (phaseSpec.assignments || []).length; phaseIndex++) {
       const phaseOutputs = await runPhase(phaseSpec, phaseIndex);
       if (!phaseOutputs.length && phaseIndex === 0) {
-        throw new Error(vi ? "tất cả worker đều lỗi — model không phản hồi" : "all workers failed — models unreachable");
+        m.insufficient = true;
+        break;
       }
       m.phases.push({ index: phaseIndex, goal: phaseSpec.goal || "", assignments: phaseSpec.assignments, synthesis: null });
       emit(m.id, "phase.gather", { place: "meeting" });
@@ -341,6 +415,7 @@ export async function runMission(mission, { signal } = {}) {
           language: m.language
         });
       } catch (err) {
+        if (signal?.aborted) throw err;
         console.warn(`[orchestrator] synthesize skipped: ${err.message}`);
         synthesis = { phaseSummary: "", concerns: [], sufficient: true, nextPhase: null };
       }
@@ -367,7 +442,7 @@ export async function runMission(mission, { signal } = {}) {
     void lastSynthesis;
 
     if (!m.outputs.length) {
-      throw new Error(vi ? "tất cả worker đều lỗi — model không phản hồi" : "all workers failed — models unreachable");
+      m.insufficient = true;
     }
 
     await drainBoard();
@@ -400,6 +475,7 @@ export async function runMission(mission, { signal } = {}) {
           await pace(m, 2600);
         }
       } catch (err) {
+        if (signal?.aborted) throw err;
         console.warn(`[orchestrator] verify pass skipped: ${err.message}`);
       }
     }
@@ -417,14 +493,22 @@ export async function runMission(mission, { signal } = {}) {
       const dissent = [...oppose, ...conditional];
       emit(m.id, "conflict.detected", { between: considered.map(o => o.agentId), summary: { support: support.map(o => o.name), oppose: dissent.map(o => o.name) } });
       await pace(m, 1800);
-      await runMeeting(m, signal);
+      try {
+        await runMeeting(m, signal);
+      } catch (err) {
+        if (signal?.aborted) throw err;
+        console.warn(`[orchestrator] meeting skipped: ${err.message}`);
+        m.meeting = null;
+        emit(m.id, "conflict.none", {});
+      }
     } else {
       m.meeting = null;
       emit(m.id, "conflict.none", {});
     }
 
     m.status = "reporting";
-    if (m.depth === "deep" && !informational) {
+    for (const s of m.subtasks) if (s.status !== "done") s.status = "failed";
+    if (m.depth === "deep" && !informational && !m.insufficient) {
       emit(m.id, "scenarios.started", { agentId: lead.id });
       await pace(m, 1600);
       try {
@@ -438,23 +522,35 @@ export async function runMission(mission, { signal } = {}) {
         m.scenarios = sc;
         emit(m.id, "scenarios.done", { agentId: lead.id, scenarios: sc.scenarios, sensitivity: sc.sensitivity });
       } catch (err) {
+        if (signal?.aborted) throw err;
         console.warn(`[orchestrator] scenarios skipped: ${err.message}`);
       }
       await pace(m, 1600);
     }
     emit(m.id, "report.started", { agentId: lead.id });
     await pace(m, 3000);
-    const report = await rt("/report", {
-      missionId: m.id,
-      missionTitle: m.title,
-      outputs: m.outputs.map(({ toolCalls, ...o }) => o),
-      meeting: m.meeting,
-      informational,
-      language: m.language,
-      depth: m.depth,
-      scenarios: m.scenarios ? m.scenarios.scenarios : null,
-      agent: lead
-    });
+    let report;
+    if (m.insufficient) {
+      report = localReport(m, vi, { insufficient: true });
+    } else {
+      try {
+        report = await rt("/report", {
+          missionId: m.id,
+          missionTitle: m.title,
+          outputs: m.outputs.map(({ toolCalls, ...o }) => o),
+          meeting: m.meeting,
+          informational,
+          language: m.language,
+          depth: m.depth,
+          scenarios: m.scenarios ? m.scenarios.scenarios : null,
+          agent: lead
+        });
+      } catch (err) {
+        if (signal?.aborted) throw err;
+        console.warn(`[orchestrator] report fell back to local assembly: ${err.message}`);
+        report = localReport(m, vi);
+      }
+    }
     m.report = pick(report, ["markdown", "recommendation", "confidence", "confidenceRationale"]);
     if (m.report.markdown && m.outputs.some(o => o.simulated) && !/provisional|tạm thời/i.test(m.report.markdown)) {
       m.report.markdown = (vi
@@ -469,14 +565,15 @@ export async function runMission(mission, { signal } = {}) {
       scenarios: m.scenarios ? m.scenarios.scenarios : null,
       sensitivity: m.scenarios ? m.scenarios.sensitivity : null,
       phases: m.phases.map(p => ({ index: p.index, goal: p.goal, synthesis: p.synthesis })),
+      quorum: computeQuorum(m.outputs),
       breakdown: m.outputs.map(o => pick(o, ["agentId", "name", "focus", "lens", "stance", "confidence", "confidenceBefore", "flags", "simulated", "takeover"]))
     });
     m.status = "done";
-    const decision = informational ? "informational" : m.meeting?.decision || (oppose.length ? "do-not-proceed" : considered.some(o => o.stance === "conditional") ? "proceed-with-conditions" : "proceed");
+    const decision = m.insufficient ? null : informational ? "informational" : m.meeting?.decision || (oppose.length ? "do-not-proceed" : considered.some(o => o.stance === "conditional") ? "proceed-with-conditions" : "proceed");
     m.decision = decision;
-    const fragility = informational ? null : fragilityOf(m.meeting?.participants?.length ? m.meeting.participants : considered);
+    const fragility = m.insufficient || informational ? null : fragilityOf(m.meeting?.participants?.length ? m.meeting.participants : considered);
     m.fragility = fragility;
-    emit(m.id, "mission.completed", { title: m.title, decision, recommendation: m.report.recommendation, fragility });
+    emit(m.id, "mission.completed", { title: m.title, decision, recommendation: m.report.recommendation, fragility, quorum: computeQuorum(m.outputs) });
     const flagCount = m.outputs.reduce((n, o) => n + (o.flags?.length || 0), 0);
     briefingStore.add({
       id: `b_${m.id}`,
@@ -554,20 +651,35 @@ export async function runMission(mission, { signal } = {}) {
     await pace(m, 2500);
     emit(m.id, "phase.disperse", {});
   } catch (err) {
-    console.error(`[orchestrator] mission ${m.id} failed:`, err);
-    m.status = "failed";
-    emit(m.id, "mission.failed", { error: String(err.message || err) });
-    briefingStore.add({
-      id: `b_${m.id}`,
-      missionId: m.id,
-      kind: "failed",
-      title: m.title,
-      error: String(err.message || err).slice(0, 200),
-      severity: "alert",
-      auto: !!m.auto,
-      userEmail: m.userEmail || null,
-      at: Date.now()
-    });
+    if (m.cancelRequested) {
+      m.status = "cancelled";
+      emit(m.id, "mission.cancelled", {});
+      briefingStore.add({
+        id: `b_${m.id}`,
+        missionId: m.id,
+        kind: "cancelled",
+        title: vi ? `Đã dừng: ${m.title}` : `Stopped: ${m.title}`,
+        severity: "info",
+        auto: !!m.auto,
+        userEmail: m.userEmail || null,
+        at: Date.now()
+      });
+    } else {
+      console.error(`[orchestrator] mission ${m.id} failed:`, err);
+      m.status = "failed";
+      emit(m.id, "mission.failed", { error: String(err.message || err) });
+      briefingStore.add({
+        id: `b_${m.id}`,
+        missionId: m.id,
+        kind: "failed",
+        title: m.title,
+        error: String(err.message || err).slice(0, 200),
+        severity: "alert",
+        auto: !!m.auto,
+        userEmail: m.userEmail || null,
+        at: Date.now()
+      });
+    }
   }
 }
 

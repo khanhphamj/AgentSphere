@@ -11,8 +11,17 @@ const CLIENT_SECRET = process.env.CLIENT_SECRET || "dev-secret";
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8081";
 const MCP_POLICY_URL = process.env.MCP_POLICY_URL || "http://localhost:8083";
 const AGENT_RUNTIME_URL = process.env.AGENT_RUNTIME_URL || "http://localhost:8082";
-const ACCEPT_ANY = (process.env.AUTH_ACCEPT_ANY_CODE || "true") === "true";
+const ACCEPT_ANY = (process.env.AUTH_ACCEPT_ANY_CODE || "false") === "true";
 const JWT_TTL_H = Number(process.env.JWT_TTL_HOURS || 72);
+const PROD = process.env.NODE_ENV === "production";
+if (PROD && (!process.env.CLIENT_ID || !process.env.CLIENT_SECRET || process.env.CLIENT_SECRET === "dev-secret")) {
+  console.error("[gateway] refusing to start in production without a real CLIENT_ID/CLIENT_SECRET");
+  process.exit(1);
+}
+if (PROD && ACCEPT_ANY) {
+  console.error("[gateway] refusing to start in production with AUTH_ACCEPT_ANY_CODE=true");
+  process.exit(1);
+}
 const app = express();
 app.use(cors());
 const nameFromEmail = email => {

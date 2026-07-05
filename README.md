@@ -454,8 +454,59 @@ different model than the rate-limited worker, so it usually goes through),
 with the full worker toolbox. It emits `agent.takeover`, the lead announces it on campus, and the
 result fills the worker's slot — flagged `takeover: { from, fromName }` on the output and
 breakdown, attributed to the lead. Only if the lead's attempt also fails is the assignment
-finally dropped (and if **every** phase-1 assignment fails, the mission fails). This keeps a
-single rate-limited model from silently dropping a section of the mission.
+finally dropped. Even if **every** assignment fails the mission no longer errors out (see
+**Graceful degradation** below). This keeps a single rate-limited model from silently dropping
+a section of the mission.
+
+**Graceful degradation over hard failure — a mission ends with an answer, not a red error.**
+Forensics on the "failed mission" state found that model failures almost never fail a mission
+(every `chat()` call has a code/simulate fallback) — the hard failures came from a handful of
+**unwrapped `throw` sites**: the draft `/run`, the lead-guidance exchange, the debate
+(`runMeeting`), the final `/report`, and the "all workers failed" guard. Each now **degrades in
+place** instead of discarding the run:
+- **`runtime()` (orchestrator→runtime) retries** connect-phase errors (`ECONNREFUSED`/DNS/host
+  unreachable, backoff 1.5 s→4 s), so a runtime restart/redeploy window no longer kills in-flight
+  missions — it never retries a real timeout or a user cancel (idempotency-safe: only calls that
+  provably never landed are retried).
+- A **thrown draft `/run` becomes a lead takeover** (it used to abort the whole `Promise.all`); a
+  **failed debate** falls back to the code consensus; a **failed `/report`** is rebuilt locally
+  from the collected outputs (`localReport`) so a final-render blip never loses completed work.
+- **Total outage → an honest completed report.** If planning fails, or every worker *and* its
+  lead takeover fail (all models unreachable), the mission finishes as **`done`** with a
+  ~10%-confidence *"couldn't complete — please retry"* report and **no verdict** — a Retry
+  affordance, not a dead 'failed' card. (Verified: dead-LLM mission → `status:"done"`, confidence
+  10, honest report + a `warn` briefing.)
+- **The fallback ladder is provider-diverse.** `LLM_FALLBACK_MODELS` now leads with a *different
+  provider* than the lead's `gpt-5-mini` (`gemini/gemini-3.1-flash-lite,openai/gpt-5-mini`), so a
+  rate-limited worker's fallback stops piling onto the lead's own model — the mechanism that was
+  collapsing a six-model squad down to one and starving the lead. (Verified on the same prompt:
+  lead takeovers **3→0**, mission time **~14 min→~8 min**, confidence **33%→50%**.)
+- **Cancel and the 30-minute deadline still stop promptly** — every degradation catch re-checks
+  `signal.aborted` and re-throws, so graceful handling never swallows a stop (measured: Stop
+  terminates the run in a few milliseconds).
+
+**Source & confidence hygiene (QA-hardened).** A 12-scenario end-user QA (sub-agents + codex,
+cross-reviewed) surfaced pre-existing quality gaps that are now closed:
+- **The "Real data sources" list only shows structured result URLs.** `buildSources` used to
+  regex-scrape every `http(s)://` out of the serialized tool JSON, so links buried in a result's
+  *content/snippet* (once even an adult and a gaming URL for unrelated queries) leaked in as
+  "sources". It now extracts only `"url":` values, `isJunkSource` also blocks adult/gaming/social/
+  dictionary hosts and malformed hostnames, and `web.search` no longer falls back to raw unranked
+  results when nothing scores relevant.
+- **Confidence is recalibrated.** The disagreement penalty scales with the *margin* — a
+  near-unanimous squad is barely penalized instead of a flat −8 that made an 8-of-9-agree mission
+  read as 56% — and the fact-check-flag penalty scales with the *total* flag count, so one weak
+  figure no longer looks like twenty.
+- **The code-fallback recommendation actually decides.** It no longer echoes the whole question
+  back (`Proceed with "<question>" under conditions: …`) or pastes advisor *benefits* as
+  "conditions"; it states the stance and points to a clean Conditions section.
+- **Empty advisor outputs are dropped, not counted.** A worker that returns no summary and no key
+  points is treated as a failed subtask (routed to takeover, then dropped) instead of a phantom
+  `conditional 70%` vote that diluted consensus and confidence.
+- **A user-stopped mission is `status:"cancelled"`, not `failed`** — rendered as **Stopped** with a
+  Retry affordance everywhere — and a `clarifying` mission left unanswered is reaped after
+  `CLARIFY_TTL_MS`. Lead takeovers are capped per mission (`max(2, ⌈pool/2⌉)`) so one overloaded run
+  can't monopolize the lead.
 
 ## MCP Policy Groups
 
@@ -673,6 +724,10 @@ every beat below is driven 1:1 by real pipeline events (no faked progress):
   Evidence — also render in the **Missions history**, not just live. Missions run
   before this change show no Sources section rather than a misleading empty note
   (`collectRealSources`; persisted in `pipeline.js`, rebuilt in `TasksPanel`)
+- **Decision Dossier export** — the report action row now offers a self-contained
+  `.html` dossier for offline sharing. It bundles verdict, confidence, advisor
+  quorum, per-advisor stances, the full report, cited sources, dissent/debate and
+  scenarios in one portable file (`buildDossierHtml`, `downloadDossier`).
 - **Sticky jump bar** — once a report lands, a thin sticky table-of-contents bar
   sits under the status card: chips for the sections that actually exist —
   *Conclusion / Full report / Subtasks (N) / Sources (N) / Debate*. Clicking

@@ -66,6 +66,10 @@ const uncitedFigures = (output, evidence) => {
 const POLICY_URL = (process.env.MCP_POLICY_URL || "http://localhost:8083").replace(/\/$/, "");
 const CLIENT_ID = process.env.CLIENT_ID || "";
 const CLIENT_SECRET = process.env.CLIENT_SECRET || "";
+if (process.env.NODE_ENV === "production" && (!CLIENT_ID || !CLIENT_SECRET)) {
+  console.error("[agent-runtime] refusing to start in production without CLIENT_ID/CLIENT_SECRET");
+  process.exit(1);
+}
 const INTERAGENT_BUS = process.env.INTERAGENT_BUS === "on";
 const INTERAGENT_SYNC = process.env.INTERAGENT_SYNC === "on";
 const INTERAGENT_SPAWN = process.env.INTERAGENT_SPAWN === "on";
@@ -113,7 +117,12 @@ async function requestApproval(bus, agentId, tool, args) {
   }
 }
 function internalAuth(req, res, next) {
-  if (!CLIENT_ID) return next();
+  if (!CLIENT_ID || !CLIENT_SECRET) {
+    if (process.env.NODE_ENV === "production") return res.status(503).json({
+      error: "internal auth not configured"
+    });
+    return next();
+  }
   if (req.get("x-client-id") === CLIENT_ID && req.get("x-client-secret") === CLIENT_SECRET) return next();
   res.status(401).json({
     error: "invalid client credentials"
@@ -905,6 +914,9 @@ app.post("/run", internalAuth, async (req, res) => {
       parsed.confidence = Math.max(5, Math.min(parsed.confidence ?? 60, 70 - 6 * figs.length));
     }
   }
+  if (parsed.stance !== "insufficient" && !String(parsed.summary || "").trim() && !(parsed.keyPoints || []).some(k => String(k).trim()) && !String(parsed.say || "").trim()) {
+    return res.json({ missionId, agentId, lens, failed: true, error: "empty output — no summary or key points" });
+  }
   for (const tc of finalToolLog) remember(missionId, agentId, "tool", `${tc.server}/${tc.tool} ${tc.allowed ? "ok" : "denied"}`);
   remember(missionId, agentId, "conclusion", `${parsed.stance || "done"} (${parsed.confidence ?? "?"}%) — ${parsed.summary || parsed.say || ""}`);
   res.json({
@@ -1281,7 +1293,7 @@ app.post("/report", internalAuth, async (req, res) => {
       };
     }
   }
-  const sources = buildSources(dataNotes, language);
+  const sources = buildSources(dataNotes, language, missionTitle);
   if (sources) report.markdown += `\n\n${sources}`;
   res.json(report);
 });

@@ -1,6 +1,7 @@
 import React from "react";
 import AS from "../data.js";
 import { api } from "../api.js";
+import { buildDossierHtml } from "../dossier.js";
 import { GlassPanel, DSIcon, StatusDot, agentPortrait, STATUS_COLOR } from "./chrome.jsx";
 const DSLG = () => (window.MSSDesignSystem_fa0208 || {}).LiquidGlass;
 function useWide() {
@@ -563,12 +564,16 @@ function ConfidenceBreakdown({
   const hasData = rows.length > 0 || !!rationale;
   const flagged = rows.reduce((n, o) => n + (o.flags ? o.flags.length : 0), 0);
   const hasRisk = rows.some(o => RISK_LENS.test(o.lens || o.focus || ""));
+  const total = (breakdown || []).length;
+  const takenOver = (breakdown || []).filter(b => b.takeover).length;
+  const simulated = (breakdown || []).filter(b => b.simulated).length;
   return <span className="as-conf-wrap">
       <button className={"as-report-conf" + (hasData ? " click" : "")} onClick={() => hasData && setOpen(v => !v)} title="Confidence = how sure the recommendation is (penalized for disagreement, flags, or offline fallback)">
         <DSIcon name="shield-check" size={13} />{confidence}% {label || "confidence"}
         {hasData && <svg className={"as-conf-caret" + (open ? " open" : "")} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>}
       </button>
       {open && hasData && <div className="as-conf-pop">
+          {total > 0 && (takenOver > 0 || simulated > 0) && <div className="as-conf-note">Advisor quorum: {total - takenOver}/{total} by advisors · {takenOver} lead takeover{simulated ? ` · ${simulated} offline` : ""}</div>}
           <div className="as-conf-note">Weighted average{hasRisk ? " · risk angle ×2" : ""}{flagged ? ` · ${flagged} flag${flagged === 1 ? "" : "s"}` : ""}</div>
           {rows.length > 1 && <div className="as-conf-why">Lower than each agent because points are deducted for disagreement / verification flags / offline mode.</div>}
           {rows.map((o, i) => {
@@ -843,6 +848,30 @@ function downloadReport(mission) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+function downloadDossier(mission) {
+  const sources = collectRealSources(mission.evidence).map(s => ({
+    tool: `${s.receipt.server}/${s.receipt.tool}`,
+    query: s.receipt.args && (s.receipt.args.query || s.receipt.args.symbol || s.receipt.args.topic || s.receipt.args.proposal || "") || "",
+    via: (s.agents || []).join(", "),
+    links: Array.isArray(s.receipt.result && s.receipt.result.results) ? s.receipt.result.results.filter(r => r && r.url).map(r => ({
+      title: r.title || r.url,
+      url: r.url,
+      host: r.host || ""
+    })) : []
+  }));
+  const html = buildDossierHtml(mission, sources);
+  const blob = new Blob([html], {
+    type: "text/html"
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `agentsphere-dossier-${(mission.title || "report").slice(0, 40).replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/^-+|-+$/g, "") || "report"}.html`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 const fmtElapsed = ms => {
   const s = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(s / 60);
@@ -853,10 +882,12 @@ export function MissionDetail({
   stream,
   onSteer,
   onAssign,
-  onToast
+  onToast,
+  onCancel
 }) {
   const P = AS.STR.panel;
   const running = !mission.done && !mission.failed && mission.phase !== "clarifying" && mission.phase !== "queued";
+  const stopped = !!mission.stopped;
   const [now, setNow] = React.useState(() => Date.now());
   React.useEffect(() => {
     if (!running) return;
@@ -866,11 +897,11 @@ export function MissionDetail({
   const elapsed = running && mission.startedAt ? fmtElapsed(now - mission.startedAt) : "";
   const phaseN = mission.phaseIndex != null ? mission.phaseIndex + 1 : null;
   const liveExtra = running ? `${mission.phase === "executing" && phaseN ? ` · Phase ${phaseN}` : ""}${elapsed ? ` · ${elapsed}` : ""}` : "";
-  const statusColor = mission.failed ? "#DC2626" : mission.done ? "#1F8A48" : "#C77700";
+  const statusColor = stopped ? "#6B7280" : mission.failed ? "#DC2626" : mission.done ? "#1F8A48" : "#C77700";
   const subs = mission.subtasks || [];
   const subDone = subs.filter(s => s.status === "done").length;
   const subCounter = !mission.done && !mission.failed && subs.length ? ` · ${subDone}/${subs.length} subtasks` : "";
-  const statusText = (mission.failed ? P.missionFailed : mission.done ? AS.STR.misc.completed : mission.phase === "clarifying" ? P.waitingForYou : mission.phase === "queued" ? P.queuedAt + (mission.queued ? ` · ${P.queuePos} ${mission.queued}` : "") : mission.phase === "event" ? P.eventRunning : mission.phase === "meeting" ? P.meeting + "…" : "Executing — orchestrated by the lead") + subCounter + liveExtra;
+  const statusText = (stopped ? "Stopped" : mission.failed ? P.missionFailed : mission.done ? AS.STR.misc.completed : mission.phase === "clarifying" ? P.waitingForYou : mission.phase === "queued" ? P.queuedAt + (mission.queued ? ` · ${P.queuePos} ${mission.queued}` : "") : mission.phase === "event" ? P.eventRunning : mission.phase === "meeting" ? P.meeting + "…" : "Executing — orchestrated by the lead") + subCounter + liveExtra;
   const meeting = mission.meeting;
   const [subAllOpen, setSubAllOpen] = React.useState(false);
   const [subSignal, setSubSignal] = React.useState(0);
@@ -936,6 +967,21 @@ export function MissionDetail({
           }}></i>
             {statusText}
           </span>
+          {running && <div style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        flexWrap: "wrap",
+        marginTop: 7
+      }}>
+              <div className="as-bg-hint" style={{
+          marginTop: 0
+        }}>Runs on the server — you can safely close this tab; the result will land in your Inbox.</div>
+              <button type="button" className="as-btn ghost" style={{
+          padding: "5px 9px",
+          fontSize: 11.5
+        }} onClick={() => onCancel && onCancel(mission.id)}>Stop</button>
+            </div>}
           {mission.depth === "deep" && <span className="as-deep-badge">🔬 {P.deepBadge}</span>}
         </div>
       </div>
@@ -943,11 +989,11 @@ export function MissionDetail({
       {mission.phase === "queued" && <div className="as-stage-cap" style={{
       margin: "0 0 10px"
     }}>{P.queued}</div>}
-      {mission.failed && onAssign && <button className="as-btn" style={{
+      {(mission.failed || mission.stopped) && onAssign && <button className="as-btn" style={{
       margin: "2px 0 12px"
     }} onClick={() => Promise.resolve(onAssign(mission.title)).then(() => onToast && onToast(AS.STR.toast.retried, "info")).catch(() => onToast && onToast(AS.STR.toast.assignFailed, "warn"))}>↻ {P.retry}</button>}
 
-      {!mission.failed && mission.phase !== "queued" && mission.stage != null && <StageTracker stage={mission.stage} hadDebate={mission.hadDebate} done={mission.done} paused={mission.phase === "event"} caption={mission.phase === "event" ? P.eventResume : null} />}
+      {!mission.failed && !mission.stopped && mission.phase !== "queued" && mission.stage != null && <StageTracker stage={mission.stage} hadDebate={mission.hadDebate} done={mission.done} paused={mission.phase === "event"} caption={mission.phase === "event" ? P.eventResume : null} />}
 
       {mission.done && jumpSections.length > 1 && <nav className="as-jumpbar" aria-label={P.jumpAria}>
           <span className="as-jumpbar-label">Jump to</span>
@@ -1039,6 +1085,10 @@ export function MissionDetail({
             downloadReport(mission);
             onToast && onToast(AS.STR.toast.reportDownloaded, "ok");
           }}>{P.downloadReport}</button>
+              <button className="as-eyebrow-act" onClick={() => {
+            downloadDossier(mission);
+            onToast && onToast("Dossier downloaded", "ok");
+          }}>Dossier</button>
             </span>
           </div>
           <div className="as-card">
@@ -1183,8 +1233,9 @@ export function TasksPanel({
       setDetail({
         id: m.id,
         title: m.title,
-        done: m.status === "done" || m.status === "failed",
+        done: m.status === "done" || m.status === "failed" || m.status === "cancelled",
         failed: m.status === "failed",
+        stopped: m.status === "cancelled" || !!m.cancelRequested,
         phase: m.status,
         stage: 6,
         hadDebate: !!m.meeting,
@@ -1314,7 +1365,8 @@ export function MissionPanel({
   onClose,
   onAssign,
   onToast,
-  onSteer
+  onSteer,
+  onCancel
 }) {
   const [draft, setDraft] = React.useState("");
   const [err, setErr] = React.useState("");
@@ -1425,18 +1477,23 @@ export function MissionPanel({
             {err && <div className="as-login-err">{err}</div>}
             <div style={{
           display: "flex",
-          justifyContent: mission ? "space-between" : "flex-end",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
           marginTop: 10
         }}>
-              {mission && <button className="as-btn ghost" onClick={() => onComposeChange && onComposeChange(false)}>
-                  {P.lastResult}
-                </button>}
-              <button type="button" className={"as-deep-toggle" + (deep ? " on" : "")} title={P.deepDiveHint} aria-pressed={deep} onClick={() => setDeep(v => !v)}>
-                <span className="as-deep-dot"></span>🔬 {P.deepDive}
-              </button>
-              <button className="as-btn primary" disabled={!draft.trim()} onClick={assign}>
-                {P.missionGo}
-              </button>
+              <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8
+          }}>
+                {mission && <button className="as-btn ghost" onClick={() => onComposeChange && onComposeChange(false)}>{P.lastResult}</button>}
+                <div className="as-mode-seg" role="group" aria-label="Research mode">
+                  <button type="button" className={"as-mode-opt" + (!deep ? " on" : "")} aria-pressed={!deep} onClick={() => setDeep(false)}>Quick</button>
+                  <button type="button" className={"as-mode-opt" + (deep ? " on" : "")} aria-pressed={deep} onClick={() => setDeep(true)} title={P.deepDiveHint}>🔬 Deep research</button>
+                </div>
+              </div>
+              <button className="as-btn primary" disabled={!draft.trim()} onClick={assign}>{P.missionGo}</button>
             </div>
             <div className="as-eyebrow">Receiving squad</div>
             <div style={{
@@ -1476,7 +1533,7 @@ export function MissionPanel({
                   </button>
                 </div>
               </div>}
-            <MissionDetail mission={mission} stream onSteer={onSteer ? text => onSteer(mission.id, text) : null} onAssign={onAssign} onToast={onToast} />
+            <MissionDetail mission={mission} stream onSteer={onSteer ? text => onSteer(mission.id, text) : null} onAssign={onAssign} onToast={onToast} onCancel={onCancel} />
             {mission.done && <button className="as-btn primary" style={{
           width: "100%",
           justifyContent: "center",
@@ -1530,11 +1587,11 @@ export function MissionPill({
   const total = mission.subtasks.length;
   const done = mission.subtasks.filter(s => s.status === "done").length;
   const pct = mission.done || isEvent ? 100 : total ? Math.round(done / total * 100) : 6;
-  const right = mission.done ? "✓ done" : isEvent ? "live 🎉" : mission.phase === "clarifying" ? "❓ needs you" : total ? `${done}/${total}` : "…";
+  const right = mission.stopped ? "⏹ stopped" : mission.failed ? "✕ failed" : mission.done ? "✓ done" : isEvent ? "live 🎉" : mission.phase === "clarifying" ? "❓ needs you" : total ? `${done}/${total}` : "…";
   const inner = <div className="as-mission-pill" onClick={onClick} style={{
     cursor: "pointer"
   }}>
-      <DSIcon name={mission.done ? "check-circle" : "zap"} size={15} />
+      <DSIcon name={mission.stopped || mission.failed ? "x" : mission.done ? "check-circle" : "zap"} size={15} />
       <span className="ttl">{mission.title}</span>
       <span className="bar"><i style={{
         width: pct + "%"

@@ -1,4 +1,56 @@
 import { isJunkSource } from "./harness.js";
+import { promises as dnsp } from "node:dns";
+import net from "node:net";
+function isPrivateIp(ip) {
+  const type = net.isIP(ip);
+  if (type === 4) {
+    const parts = ip.split(".").map(Number);
+    return parts[0] === 0 || parts[0] === 10 || (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) || parts[0] === 127 || (parts[0] === 169 && parts[1] === 254) || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) || (parts[0] === 192 && parts[1] === 168);
+  }
+  if (type === 6) {
+    const lower = ip.toLowerCase();
+    const first = parseInt(lower.split(":")[0], 16);
+    if (lower === "::1") return true;
+    if (lower === "::" || lower === "::0") return true;
+    if (Number.isFinite(first) && (first & 0xffc0) === 0xfe80) return true;
+    if (Number.isFinite(first) && (first & 0xfe00) === 0xfc00) return true;
+    if (Number.isFinite(first) && (first & 0xff00) === 0xff00) return true;
+    const mapped = lower.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
+    if (mapped) return isPrivateIp(mapped[1]);
+    const mappedHex = lower.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (mappedHex) {
+      const hi = parseInt(mappedHex[1], 16);
+      const lo = parseInt(mappedHex[2], 16);
+      return isPrivateIp(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
+    }
+  }
+  return false;
+}
+async function assertPublicUrl(rawUrl) {
+  const u = new URL(rawUrl);
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("blocked: only http(s) URLs allowed");
+  const host = u.hostname.replace(/^\[|\]$/g, "");
+  const lower = host.toLowerCase();
+  if (lower === "metadata.google.internal" || lower.endsWith(".internal")) throw new Error("blocked: private address");
+  if (net.isIP(host) !== 0) {
+    if (isPrivateIp(host)) throw new Error("blocked: private address");
+    return u;
+  }
+  const addrs = await dnsp.lookup(host, { all: true });
+  if (addrs.some(addr => isPrivateIp(addr.address))) throw new Error("blocked: resolves to private address");
+  return u;
+}
+async function safeFetch(rawUrl, opts = {}) {
+  let u = await assertPublicUrl(rawUrl);
+  for (let hop = 0; hop <= 5; hop++) {
+    const res = await fetch(u, { ...opts, redirect: "manual" });
+    if (![301, 302, 303, 307, 308].includes(res.status)) return res;
+    const location = res.headers.get("location");
+    if (!location) return res;
+    u = await assertPublicUrl(new URL(location, u).toString());
+  }
+  throw new Error("blocked: too many redirects");
+}
 const STOP = new Set("the,a,an,and,or,of,for,to,in,on,at,is,are,be,what,which,how,when,where,who,why,does,do,với,của,là,các,một,và,cho,trong,có,khong,không,duoc,được,nay,này,do,đó,ra,sao,nao,nào,khi,the,như,ve,về,theo,bao,nhieu,nhiêu,gi,gì,ai,hay,thi,thì,ma,mà,da,đã,se,sẽ".split(","));
 const deburr = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d");
 const queryTerms = q => [...new Set(deburr(q).split(/[^a-z0-9]+/).filter(w => w.length >= 3 && !STOP.has(w)))];
@@ -323,14 +375,14 @@ const EXECUTORS = {
         const relevant = ranked.filter(r => r._rel >= 2 && !r._home);
         const weak = ranked.filter(r => r._rel >= 1 && !r._home);
         const nonHome = ranked.filter(r => !r._home);
-        const pool = relevant.length ? relevant : weak.length ? weak : nonHome.length ? nonHome : ranked;
+        const pool = relevant.length ? relevant : weak.length ? weak : nonHome.slice(0, 3);
         const chosen = (ts ? [...pool].sort((a, b) => (b.ts || 0) - (a.ts || 0)) : pool).slice(0, 6);
         const lowRelevance = relevant.length === 0;
         const results = chosen.map(({ ts, _rel, _home, ...r }) => r);
         if (!results.length) throw new Error(dropped ? "only junk/navigational results" : "no results parsed");
         await Promise.all(results.slice(0, 3).map(async top => {
           try {
-            const r2 = await fetch(top.url, { headers: UA, redirect: "follow", signal: AbortSignal.timeout(9000) });
+            const r2 = await safeFetch(top.url, { headers: UA, signal: AbortSignal.timeout(9000) });
             if (r2.ok) {
               const html = await r2.text();
               top.content = decodeEntities(html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ")).trim().slice(0, 2500);
@@ -355,9 +407,8 @@ const EXECUTORS = {
       url
     }) => {
       try {
-        const res = await fetch(url, {
-          signal: AbortSignal.timeout(12000),
-          redirect: "follow"
+        const res = await safeFetch(url, {
+          signal: AbortSignal.timeout(12000)
         });
         const text = await res.text();
         return {
@@ -604,7 +655,7 @@ const _rawWebSearch = EXECUTORS["mcp-web"]["web.search"];
 const NAV_LINK = /\b(log[\s-]?in|sign[\s-]?in|sign[\s-]?up|register|subscribe|cookie|privacy|terms|contact|about\s?us|careers|advertise|newsletter|share|comment|facebook|twitter|linkedin|instagram|youtube|pinterest|whatsapp|sitemap|rss|app\s?store|google\s?play)\b/i;
 const htmlToText = html => decodeEntities(String(html).replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ")).trim();
 async function fetchHtml(url, ms = 8000) {
-  const res = await fetch(url, { headers: UA, redirect: "follow", signal: AbortSignal.timeout(ms) });
+  const res = await safeFetch(url, { headers: UA, signal: AbortSignal.timeout(ms) });
   if (!res.ok) throw new Error(`fetch ${res.status}`);
   return await res.text();
 }

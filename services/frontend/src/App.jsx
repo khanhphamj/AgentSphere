@@ -50,7 +50,8 @@ const PHASE_MAP = {
   clarifying: "clarifying",
   event: "event",
   done: "done",
-  failed: "failed"
+  failed: "failed",
+  cancelled: "failed"
 };
 const STAGE_MAP = {
   clarifying: 0,
@@ -60,11 +61,12 @@ const STAGE_MAP = {
   reporting: 5,
   event: 1,
   done: 6,
-  failed: 6
+  failed: 6,
+  cancelled: 6
 };
 function missionFromSnapshot(m) {
   if (!m) return null;
-  const terminal = m.status === "done" || m.status === "failed";
+  const terminal = m.status === "done" || m.status === "failed" || m.status === "cancelled";
   const outputs = m.outputs || [];
   const outOf = s => outputs.find(o => o.agentId === s.agentId && (o.focus === s.title || o.phase === s.phase));
   const subtasks = (m.subtasks || []).map(s => {
@@ -104,6 +106,7 @@ function missionFromSnapshot(m) {
     phase: PHASE_MAP[m.status] || "planning",
     done: terminal,
     failed: m.status === "failed",
+    stopped: m.status === "cancelled" || !!m.cancelRequested,
     stage: STAGE_MAP[m.status] ?? 0,
     hadDebate: !!m.meeting,
     clarifyQuestion: m.clarifyQuestion || null,
@@ -140,6 +143,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [clock, setClock] = React.useState("09:00");
   const [connected, setConnected] = React.useState(false);
+  const [online, setOnline] = React.useState(() => typeof navigator === "undefined" ? true : navigator.onLine);
   const [panel, setPanel] = React.useState(null);
   const [selectedAgent, setSelectedAgent] = React.useState(null);
   const [feed, setFeed] = React.useState([]);
@@ -245,7 +249,7 @@ export default function App() {
     let dead = false,
       inflight = false;
     const reconcile = m => {
-      const terminal = m.status === "done" || m.status === "failed";
+      const terminal = m.status === "done" || m.status === "failed" || m.status === "cancelled";
       if (!terminal && !m.report) return false;
       const report = m.report ? m.report.breakdown ? m.report : {
         ...m.report,
@@ -257,7 +261,8 @@ export default function App() {
           ...cur,
           done: cur.done || terminal,
           failed: cur.failed || m.status === "failed",
-          phase: m.status === "failed" ? "failed" : m.status === "done" ? "done" : cur.phase,
+          stopped: cur.stopped || m.status === "cancelled" || !!m.cancelRequested,
+          phase: m.status === "failed" || m.status === "cancelled" ? "failed" : m.status === "done" ? "done" : cur.phase,
           decision: cur.decision || m.decision || m.meeting?.decision || null,
           stage: terminal ? 6 : cur.stage || 0,
           report: cur.report || report,
@@ -377,11 +382,21 @@ export default function App() {
     return () => conn.close();
   }, [user, toast]);
   React.useEffect(() => {
+    const up = () => setOnline(true);
+    const down = () => setOnline(false);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
+    return () => {
+      window.removeEventListener("online", up);
+      window.removeEventListener("offline", down);
+    };
+  }, []);
+  React.useEffect(() => {
     if (!user || !squadLoaded || missionRef.current) return;
     let dead = false;
     api.listMissions().then(list => {
       if (dead || missionRef.current) return null;
-      const active = (list || []).find(m => m.status !== "done" && m.status !== "failed");
+      const active = (list || []).find(m => m.status !== "done" && m.status !== "failed" && m.status !== "cancelled");
       return active ? api.getMission(active.id) : null;
     }).then(full => {
       if (dead || missionRef.current || !full) return;
@@ -422,9 +437,9 @@ export default function App() {
     loadBriefings();
     if (doneToastRef.current !== mission.id) {
       doneToastRef.current = mission.id;
-      toast(mission.failed ? AS.STR.toast.failed : AS.STR.toast.done, mission.failed ? "warn" : "ok");
+      toast(mission.stopped ? "Mission stopped" : mission.failed ? AS.STR.toast.failed : AS.STR.toast.done, mission.stopped ? "info" : mission.failed ? "warn" : "ok");
     }
-  }, [mission?.done, mission?.failed, mission?.id, loadBriefings, toast]);
+  }, [mission?.done, mission?.failed, mission?.id, mission?.stopped, loadBriefings, toast]);
   const startMission = React.useCallback(async (title, depth) => {
     const resp = await api.startMission(title, depth);
     setSelectedAgent(null);
@@ -446,6 +461,11 @@ export default function App() {
       });
       toast(resp.status === "running" ? AS.STR.toast.assigned : AS.STR.toast.queued, "info");
     }
+  }, [toast]);
+  const cancelMission = React.useCallback(id => {
+    if (!id) return;
+    toast("Stopping the mission…", "info");
+    api.cancelMission(id).catch(() => {});
   }, [toast]);
   const revive = React.useCallback(id => {
     worldRef.current && worldRef.current.revive(id);
@@ -527,7 +547,7 @@ export default function App() {
   }} onCompose={() => setPanel("mission")} /> : panel === "tasks" ? <TasksPanel liveMission={mission} autoOpenId={inboxOpenId} onCompose={() => setPanel("mission")} onClose={() => {
     setPanel(null);
     setInboxOpenId(null);
-  }} /> : panel === "mission" ? <MissionPanel mission={mission} compose={composeIntent} onComposeChange={setComposeIntent} onClose={() => setPanel(null)} onAssign={startMission} onToast={toast} onSteer={(id, text) => api.steerMission(id, text).catch(() => toast(AS.STR.toast.assignFailed, "warn"))} /> : null;
+  }} /> : panel === "mission" ? <MissionPanel mission={mission} compose={composeIntent} onComposeChange={setComposeIntent} onClose={() => setPanel(null)} onAssign={startMission} onToast={toast} onSteer={(id, text) => api.steerMission(id, text).catch(() => toast(AS.STR.toast.assignFailed, "warn"))} onCancel={cancelMission} /> : null;
   const showApp = user && squadLoaded && !onboard && !settingsOpen;
   return <div>
       <canvas id="world-canvas" ref={canvasRef}></canvas>
@@ -535,6 +555,10 @@ export default function App() {
         <Toaster toasts={toasts} onDismiss={dismissToast} />
         {!user && <Login onLogin={onLogin} />}
         {showApp && <TopBar clock={clock} worldName={AS.STR.worldName} onlineCount={AS.AGENTS.length} connected={connected} onSetup={() => setSettingsOpen(true)} user={user} onLogout={onLogout} />}
+        {showApp && (!online || !connected) && <div className={"as-conn-bar" + (!online ? " off" : "")} role="status">
+            <span className="as-conn-dot"></span>
+            {!online ? "You're offline — the squad keeps working on the server. Results will sync when you reconnect." : "Reconnecting to the live feed… your mission keeps running on the server."}
+          </div>}
         {showApp && mission && !selectedAgent && panel !== "mission" && <MissionPill mission={mission} onClick={() => {
         setSelectedAgent(null);
         setComposeIntent(false);

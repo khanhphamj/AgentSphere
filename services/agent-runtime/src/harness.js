@@ -31,11 +31,14 @@ export function scenariosByCode(outputs, language) {
   };
 }
 
-const JUNK_HOST = /(^|\.)(cambridge\.org|dictionary\.com|merriam-webster\.com|thefreedictionary\.com|vocabulary\.com|wordreference\.com|collinsdictionary\.com|urbandictionary\.com|schema\.org|w3\.org|wiktionary\.org|translate\.google\.com|bing\.com|google\.com|duckduckgo\.com|yahoo\.com\/search)$/i;
-const JUNK_PATH = /\/dictionary\/|\/translate\b|\/define\b|\/spell\b|\/(sign[\- ]?in|signup|sign[\- ]?up|log[\- ]?in|login|register|account|cart|checkout|subscribe)\b/i;
+const JUNK_HOST = /(^|\.)(cambridge\.org|dictionary\.com|merriam-webster\.com|thefreedictionary\.com|vocabulary\.com|wordreference\.com|collinsdictionary\.com|urbandictionary\.com|schema\.org|w3\.org|wiktionary\.org|translate\.google\.com|bing\.com|google\.com|duckduckgo\.com|op\.gg|twitch\.tv|steamcommunity\.com|quora\.com|coursehero\.com|scribd\.com|roblox\.com|robloxdatabase\.com|steampowered\.com|userbenchmark\.com|sporcle\.com|imdb\.com|apps\.apple\.com|play\.google\.com|tratu\.soha\.vn|iciba\.com|tudientiengviet\.org|piliapp\.com|myaccountingcourse\.com)$/i;
+const JUNK_PATH = /\/dictionary\/|\/dict\/|\/accounting-dictionary\/|cau-truc-|-la-gi\b|\/translate\b|\/define\b|\/spell\b|\/(sign[\- ]?in|signup|sign[\- ]?up|log[\- ]?in|login|register|account|cart|checkout|subscribe)\b/i;
+const ADULT_JUNK = /(porn|xvideos|xnxx|xhamster|\bbokep\b|redtube|onlyfans|\bescort\b|sex-?video)/i;
 export function isJunkSource(u) {
   try {
     const { hostname, pathname } = new URL(u);
+    if (!hostname.includes(".")) return true;
+    if (ADULT_JUNK.test(u)) return true;
     if (JUNK_HOST.test(hostname)) return true;
     if (JUNK_PATH.test(pathname)) return true;
     if (u.includes("example.org")) return true;
@@ -44,8 +47,12 @@ export function isJunkSource(u) {
     return true;
   }
 }
-export function buildSources(dataNotes, language) {
+const deburrLower = s => String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const SRC_STOP = new Set("the,and,for,our,should,with,best,practices,practice,platform,service,services,api,data,system,systems,guide,into,from,what,are,how,when,which,use,using,your,vs,co,nen,dung,cac,cho,mot,khong,cua,gi,la".split(","));
+const srcTerms = s => [...new Set(deburrLower(s).match(/[a-z0-9]{4,}/g) || [])].filter(t => !SRC_STOP.has(t));
+export function buildSources(dataNotes, language, missionTitle = "") {
   const MODEL_TOOL = /^mcp-data\/data\.simulate$/;
+  const titleTerms = srcTerms(missionTitle);
   const realTools = new Set();
   const synthTools = new Set();
   const urls = new Set();
@@ -53,10 +60,23 @@ export function buildSources(dataNotes, language) {
     const tool = note.match(/([a-z-]+\/[a-z]+\.[a-z]+) →/i);
     if (tool) (MODEL_TOOL.test(tool[1]) || /synthetic|"synthetic"\s*:\s*true/i.test(note) ? synthTools : realTools).add(tool[1]);
     if (/"lowRelevance"\s*:\s*true/.test(note)) continue;
-    for (const u of note.match(/https?:\/\/[^\s"\\)]+/g) || []) {
-      const clean = u.replace(/[.,;]+$/, "");
-      if (!isJunkSource(clean)) urls.add(clean);
+    const noteQ = (note.match(/"query"\s*:\s*"([^"]+)"/) || [])[1];
+    const terms = noteQ ? srcTerms(noteQ) : titleTerms;
+    const need = terms.length >= 2 ? 2 : 1;
+    const cand = [];
+    for (const m2 of note.matchAll(/"url"\s*:\s*"(https?:\/\/[^"\\]+)"/g)) {
+      const clean = m2[1].replace(/[.,;]+$/, "");
+      if (isJunkSource(clean)) continue;
+      const next = note.indexOf('"url"', m2.index + 6);
+      const ctx = deburrLower(note.slice(m2.index, next === -1 ? m2.index + 700 : next));
+      cand.push({ clean, hits: terms.filter(t => ctx.includes(t)).length });
     }
+    let keep = cand.filter(c => !terms.length || c.hits >= need);
+    if (!keep.length && cand.length) {
+      const best = cand.reduce((a, b) => b.hits > a.hits ? b : a);
+      if (best.hits >= 1) keep = [best];
+    }
+    for (const c of keep) urls.add(c.clean);
   }
   if (!realTools.size && !synthTools.size && !urls.size) return "";
   const vi = V(language);
@@ -168,7 +188,7 @@ export function assembleReport({
   const decision = informational ? "informational" : meeting?.decision || (considered.some(o => o.stance === "oppose") ? "do-not-proceed" : conditionals.length ? "proceed-with-conditions" : "proceed");
   const conditions = meeting?.conditions?.length ? meeting.conditions : conditionals.flatMap(o => (o.keyPoints || []).slice(0, 2)).slice(0, 4);
   const infoLead = [...considered].sort((a, b) => (b.confidence || 0) - (a.confidence || 0)).find(o => o.summary) || considered[0];
-  const recommendation = informational ? (infoLead?.summary ? clampWords(String(infoLead.summary).split(/(?<=[.!?。])\s/)[0], 180) : vi ? `Thông tin cho “${missionTitle}” — xem chi tiết bên dưới.` : `Information on “${missionTitle}” — see details below.`) : decision === "proceed" ? vi ? `Tiến hành “${missionTitle}”.` : `Proceed with “${missionTitle}”.` : decision === "do-not-proceed" ? vi ? `Chưa nên tiến hành “${missionTitle}” ở thời điểm này.` : `Do not proceed with “${missionTitle}” at this time.` : vi ? `Tiến hành “${missionTitle}” có điều kiện: ${conditions.slice(0, 2).join("; ") || "thí điểm trước"}.` : `Proceed with “${missionTitle}” under conditions: ${conditions.slice(0, 2).join("; ") || "pilot first"}.`;
+  const recommendation = informational ? (infoLead?.summary ? clampWords(String(infoLead.summary).split(/(?<=[.!?。])\s/)[0], 180) : vi ? `Thông tin cho “${missionTitle}” — xem chi tiết bên dưới.` : `Information on “${missionTitle}” — see details below.`) : decision === "proceed" ? vi ? `Tiến hành “${missionTitle}”.` : `Proceed with “${missionTitle}”.` : decision === "do-not-proceed" ? vi ? `Chưa nên tiến hành “${missionTitle}” ở thời điểm này.` : `Do not proceed with “${missionTitle}” at this time.` : (cs => cs.length ? (vi ? `Tiến hành có điều kiện: ${cs.join("; ")}.` : `Proceed, with conditions: ${cs.join("; ")}.`) : (vi ? "Tiến hành có điều kiện — thí điểm trước, có cổng dừng." : "Proceed, with conditions — pilot first, with stop-gates."))(conditions.slice(0, 2).map(c => String(c).replace(/[.;\s]+$/, "")).filter(Boolean));
   const weightOf = o => RISK_LENS.test(o.lens || o.focus || "") ? 2 : 1;
   const RISK_WEIGHT = 2;
   const confBase = voters.flatMap(o => Array(weightOf(o)).fill(o.confidence)).filter(n => typeof n === "number");
@@ -185,13 +205,21 @@ export function assembleReport({
     const hasRisk = voters.some(o => weightOf(o) > 1);
     const notes = [];
     if (camps >= 2) {
-      c -= 8;
-      notes.push(vi ? "bất đồng −8" : "disagreement −8");
+      const counts = {};
+      for (const o of voters) if (o.stance) counts[o.stance] = (counts[o.stance] || 0) + 1;
+      const total = Object.values(counts).reduce((a, b) => a + b, 0);
+      const share = total ? Math.max(...Object.values(counts)) / total : 0;
+      const p = Math.round(16 * (1 - share));
+      if (p > 0) {
+        c -= p;
+        notes.push(vi ? `bất đồng −${p}` : `disagreement −${p}`);
+      }
     }
     if (flaggedReal) {
-      const p = Math.min(15, 4 * flaggedReal);
+      const flagCount = voters.reduce((n, o) => n + (o.flags?.length || 0), 0);
+      const p = Math.min(20, Math.round(2.5 * flagCount));
       c -= p;
-      notes.push(vi ? `flag ${flaggedReal} −${p}` : `${flaggedReal} flagged −${p}`);
+      notes.push(vi ? `flag ${flagCount} −${p}` : `${flagCount} flags −${p}`);
     }
     if (abstainers.length) {
       const p = Math.min(12, 6 * abstainers.length);

@@ -4,13 +4,14 @@ const BASE_URL = (process.env.LLM_BASE_URL || "").replace(/\/$/, "");
 const API_KEY = process.env.LLM_API_KEY || "";
 const SIM_MODE = (process.env.LLM_SIMULATION || "auto").toLowerCase();
 export const SIM_FORCED = SIM_MODE === "on";
+const FALLBACK_MODELS = (process.env.LLM_FALLBACK_MODELS ?? "gemini/gemini-3.1-flash-lite,openai/gpt-5-mini").split(",").map(s => s.trim()).filter(Boolean);
 export class SimulationRequested extends Error {}
 export class PromptBlocked extends Error {}
 const isPromptBlocked = (status, text) => status === 400 && /usage policy|flagged|moderat|invalid[ _-]?prompt|content[ _-]?(filter|policy)|safety system|prohibited|violat/i.test(text || "");
 const usesResponsesApi = model => /^openai\/gpt-5/.test(model);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const NO_JSON_MODE = new Set();
-const jsonModeCapable = model => /^openai\//.test(model) && !usesResponsesApi(model) && !NO_JSON_MODE.has(model);
+const jsonModeCapable = model => !usesResponsesApi(model) && !NO_JSON_MODE.has(model);
 const BREAKER_FAILS = 2,
   BREAKER_OPEN_MS = 60_000;
 const breaker = new Map();
@@ -47,7 +48,7 @@ async function fetchWithRetry(url, options, label) {
       }
       throw err;
     }
-    if ((res.status === 429 || res.status === 503) && attempt < backoffs.length) {
+    if ((res.status === 429 || res.status === 503 || res.status === 500 || res.status === 502 || res.status === 504) && attempt < backoffs.length) {
       const retryAfter = Number(res.headers.get("retry-after"));
       const wait = retryAfter > 0 ? Math.min(retryAfter * 1000, 20000) : backoffs[attempt];
       console.warn(`[agent-runtime] ${label} ${res.status} rate-limited — retry ${attempt + 1}/${backoffs.length} in ${Math.round(wait / 1000)}s`);
@@ -178,6 +179,7 @@ async function callApi({
 export async function chat(opts, simulate) {
   const account = opts.account || accountStore.getStore() || null;
   const models = (Array.isArray(opts.model) ? opts.model : [opts.model]).filter(Boolean);
+  if (models.length) for (const f of FALLBACK_MODELS) if (!models.includes(f)) models.push(f);
   let lastErr = new SimulationRequested("no model configured");
   const live = models.filter(m => !breakerOpen(account, m));
   if (!live.length && models.length && SIM_MODE !== "off" && simulate) {
