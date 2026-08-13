@@ -20,5 +20,5 @@ services/agent-runtime/data/models.json
 
 .greennode.json
 
-
 .playwright-mcp/
+.agentbase/
