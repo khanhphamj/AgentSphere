@@ -19,3 +19,6 @@ services/agent-runtime/data/agentbase/
 services/agent-runtime/data/models.json
 
 .greennode.json
+
+
+.playwright-mcp/

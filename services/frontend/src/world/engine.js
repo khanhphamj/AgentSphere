@@ -63,6 +63,23 @@ const ASWorld = (() => {
     for (let r = 1; r < 6; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (M.walkable(x + dx, y + dy)) return [x + dx, y + dy];
     return [x, y];
   }
+  function losWalkable(x0, y0, x1, y1) {
+    const dx = x1 - x0, dy = y1 - y0;
+    const n = Math.max(Math.abs(dx), Math.abs(dy)) * 4;
+    if (!n) return M.walkable(x0, y0);
+    for (let i = 0; i <= n; i++) if (!M.walkable(Math.round(x0 + dx * i / n), Math.round(y0 + dy * i / n))) return false;
+    return true;
+  }
+  function smoothPath(p) {
+    if (!p || p.length < 3) return p;
+    const out = [p[0]];
+    let anchor = 0;
+    for (let i = 2; i < p.length; i++) {
+      if (!losWalkable(p[anchor][0], p[anchor][1], p[i][0], p[i][1])) { out.push(p[i - 1]); anchor = i - 1; }
+    }
+    out.push(p[p.length - 1]);
+    return out;
+  }
   function shadeHex(hex, amt) {
     const n = parseInt(hex.slice(1), 16);
     const r = Math.max(0, Math.min(255, (n >> 16) + amt));
@@ -294,14 +311,15 @@ const ASWorld = (() => {
     const lean = gOn && tg.kind === "lean" ? (a.dir === "left" ? -1 : a.dir === "right" ? 1 : 0) : 0;
     const playing = a.state === "social" && a.relaxKind === "court";
     const mv = a.moving || playing;
-    const sw = mv ? Math.sin(t * 7 + a._h) : 0;
-    const contact = sw > 0.5 || sw < -0.5;
-    const bob = mv && !contact ? 1 : 0;
+    const sw = a.moving ? Math.sin((a.stride || 0) + a._h) : playing ? Math.sin(t * 7 + a._h) : 0;
+    const gait = mv ? Math.round(sw * 2) : 0;
+    const bob = mv ? Math.round(1 - Math.abs(sw)) : 0;
+    const headSettle = mv && Math.abs(sw) > 0.82 ? 1 : 0;
     const fx = (ctx2, X, Y, w, h, c) => {
       ctx2.fillStyle = c;
       ctx2.fillRect(X, Y, w, h);
     };
-    const shw = mv ? contact ? 1 : -1 : 0;
+    const shw = mv ? Math.round(Math.abs(sw) * 2) - 1 : 0;
     ctx.fillStyle = "rgba(40,60,45,0.22)";
     ctx.fillRect(x - 4 - shw, y + 5, 10 + shw * 2, 3);
     if (a.def.lead) {
@@ -318,47 +336,57 @@ const ASWorld = (() => {
     const oP = shadeHex("#4A4440", -55);
     const oS = shadeHex(p.shirt, -55);
     const oH = shadeHex(p.hair, -55);
-    if (mv && sw > 0.5) {
-      fx(ctx, x - 4, y + 1 + oy, 3, 5, "#4A4440");
-      fx(ctx, x + 1, y + 2 + oy, 3, 4, "#4A4440");
-      fx(ctx, x - 5, y + 1 + oy, 1, 5, oP);
-      fx(ctx, x + 4, y + 2 + oy, 1, 4, oP);
-      fx(ctx, x - 4, y + 5 + oy, 3, 1, oP);
-      fx(ctx, x + 1, y + 5 + oy, 3, 1, oP);
-    } else if (mv && sw < -0.5) {
-      fx(ctx, x - 4, y + 2 + oy, 3, 4, "#4A4440");
-      fx(ctx, x + 1, y + 1 + oy, 3, 5, "#4A4440");
-      fx(ctx, x - 5, y + 2 + oy, 1, 4, oP);
-      fx(ctx, x + 4, y + 1 + oy, 1, 5, oP);
-      fx(ctx, x - 4, y + 5 + oy, 3, 1, oP);
-      fx(ctx, x + 1, y + 5 + oy, 3, 1, oP);
+    const lStride = gait;
+    const rStride = -gait;
+    const lLift = Math.max(0, -lStride);
+    const rLift = Math.max(0, -rStride);
+    const lReach = Math.max(0, lStride);
+    const rReach = Math.max(0, rStride);
+    const lLegY = y + 1 + oy;
+    const rLegY = y + 1 + oy;
+    const lFootY = y + 5 + oy + (lReach > 1 ? 1 : 0) - lLift;
+    const rFootY = y + 5 + oy + (rReach > 1 ? 1 : 0) - rLift;
+    const lLegH = Math.max(3, lFootY - lLegY + 1);
+    const rLegH = Math.max(3, rFootY - rLegY + 1);
+    fx(ctx, x - 4, lLegY, 3, lLegH, "#4A4440");
+    fx(ctx, x + 1, rLegY, 3, rLegH, "#4A4440");
+    fx(ctx, x - 5, lLegY, 1, lLegH, oP);
+    fx(ctx, x + 4, rLegY, 1, rLegH, oP);
+    fx(ctx, x - 4 - (lReach > 0 ? 1 : 0), lFootY, 3 + (lReach > 0 ? 1 : 0), 1, oP);
+    fx(ctx, x + 1, rFootY, 3 + (rReach > 0 ? 1 : 0), 1, oP);
+    if (mv) {
+      const armSwing = gait;
+      const side = a.dir === "left" ? -1 : a.dir === "right" ? 1 : 0;
+      const lArmX = x - 7 + (side > 0 ? 1 : 0);
+      const rArmX = x + 5 + (side < 0 ? -1 : 0);
+      const lArmY = y - 5 + oy - armSwing;
+      const rArmY = y - 5 + oy + armSwing;
+      fx(ctx, lArmX, lArmY, 1, 6, oS);
+      fx(ctx, lArmX + 1, lArmY + 1, 1, 5, p.skin);
+      fx(ctx, rArmX + 1, rArmY, 1, 6, oS);
+      fx(ctx, rArmX, rArmY + 1, 1, 5, p.skin);
     } else {
-      fx(ctx, x - 4, y + 1 + oy, 3, 5, "#4A4440");
-      fx(ctx, x + 1, y + 1 + oy, 3, 5, "#4A4440");
-      fx(ctx, x - 5, y + 1 + oy, 1, 5, oP);
-      fx(ctx, x + 4, y + 1 + oy, 1, 5, oP);
-      fx(ctx, x - 4, y + 5 + oy, 3, 1, oP);
-      fx(ctx, x + 1, y + 5 + oy, 3, 1, oP);
+      fx(ctx, x - 6, y - 5 + oy, 1, 7, oS);
+      fx(ctx, x + 5, y - 5 + oy, 1, 7, oS);
     }
-    fx(ctx, x - 6, y - 5 + oy + (sw < -0.5 ? 1 : 0), 1, 7, oS);
-    fx(ctx, x + 5, y - 5 + oy + (sw > 0.5 ? 1 : 0), 1, 7, oS);
     fx(ctx, x - 5, y - 5 + oy, 10, 7, p.shirt);
     fx(ctx, x - 5, y - 5 - bre + oy, 10, 2, shadeHex(p.shirt, 22));
     fx(ctx, x + 4, y - 3 + oy, 1, 4, shadeHex(p.shirt, -22));
     fx(ctx, x - 4, y + 1 + oy, 8, 1, shadeHex(p.shirt, -22));
     fx(ctx, x - 5, y - 5 + oy, 1, 1, oS);
     fx(ctx, x + 4, y - 5 + oy, 1, 1, oS);
-    fx(ctx, x - 4 + lean, y - 13 + oy + hb, 8, 8, p.skin);
-    fx(ctx, x - 4 + lean, y - 14 + oy + hb, 8, 3, p.hair);
-    fx(ctx, x - 4 + lean, y - 12 + oy + hb, 2, 3, p.hair);
-    fx(ctx, x + 2 + lean, y - 12 + oy + hb, 2, 3, p.hair);
-    fx(ctx, x - 3 + lean, y - 14 + oy + hb, 3, 1, shadeHex(p.hair, 22));
-    fx(ctx, x - 5 + lean, y - 14 + oy + hb, 1, 9, oH);
-    fx(ctx, x + 4 + lean, y - 14 + oy + hb, 1, 9, oH);
-    fx(ctx, x - 4 + lean, y - 15 + oy + hb, 8, 1, oH);
-    drawFace(ctx, a, x + lean, y, oy + hb, frame, t);
-    drawProp(ctx, a, x + lean, y, oy + hb);
-    if (a.petalUntil && t < a.petalUntil) fx(ctx, x + lean, y - 16 + oy + hb, 1, 1, PETAL_A);
+    const hOy = oy + hb + headSettle;
+    fx(ctx, x - 4 + lean, y - 13 + hOy, 8, 8, p.skin);
+    fx(ctx, x - 4 + lean, y - 14 + hOy, 8, 3, p.hair);
+    fx(ctx, x - 4 + lean, y - 12 + hOy, 2, 3, p.hair);
+    fx(ctx, x + 2 + lean, y - 12 + hOy, 2, 3, p.hair);
+    fx(ctx, x - 3 + lean, y - 14 + hOy, 3, 1, shadeHex(p.hair, 22));
+    fx(ctx, x - 5 + lean, y - 14 + hOy, 1, 9, oH);
+    fx(ctx, x + 4 + lean, y - 14 + hOy, 1, 9, oH);
+    fx(ctx, x - 4 + lean, y - 15 + hOy, 8, 1, oH);
+    drawFace(ctx, a, x + lean, y, hOy, frame, t);
+    drawProp(ctx, a, x + lean, y, hOy);
+    if (a.petalUntil && t < a.petalUntil) fx(ctx, x + lean, y - 16 + hOy, 1, 1, PETAL_A);
     if (a.coffeeUntil && t < a.coffeeUntil) {
       fx(ctx, x + 5, y - 4 + oy, 2, 2, CUP_CREAM);
       fx(ctx, x + 5, y - 3 + oy, 2, 1, CUP_BAND);
@@ -1484,7 +1512,7 @@ const ASWorld = (() => {
       } catch (e) {}
     };
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(stampBlocks);else stampBlocks();
-    const SPEED = 78;
+    const SPEED = 48;
     const agents = D.AGENTS.map(def => {
       const [dx, dy] = nearestWalkable(def.desk.x, def.desk.y + 1);
       return {
@@ -1689,8 +1717,8 @@ const ASWorld = (() => {
       a.pauseUntil = 0;
       a._handoff = null;
       if (p) {
-        a.path = p;
-        a.moving = p.length > 0;
+        a.path = smoothPath([[a.tx, a.ty], ...p]).slice(1);
+        a.moving = a.path.length > 0;
         a.nextState = state || a.state;
         if (p.length) a.state = "moving";
       }
@@ -3155,11 +3183,17 @@ const ASWorld = (() => {
           const dx = gx - a.px,
             dy = gy - a.py;
           const dist = Math.hypot(dx, dy);
-          const adv = SPEED * dt * world.settings.speed * (M.g(a.tx, a.ty) === M.POOL ? 0.45 : 1);
+          const ease = a.path.length === 1 ? Math.max(0.4, Math.min(1, dist / 14)) : 1;
+          const adv = SPEED * dt * world.settings.speed * (M.g(a.tx, a.ty) === M.POOL ? 0.45 : 1) * ease;
           a.dir = Math.abs(dx) > Math.abs(dy) ? dx > 0 ? "right" : "left" : dy > 0 ? "down" : "up";
+          a.stride = (a.stride || 0) + Math.min(dist, adv) * 0.36;
           if (dist <= adv) {
             a.px = gx;
             a.py = gy;
+            a.tx = nx;
+            a.ty = ny;
+            a.path.shift();
+          } else if (a.path.length > 1 && dist <= 5) {
             a.tx = nx;
             a.ty = ny;
             a.path.shift();
