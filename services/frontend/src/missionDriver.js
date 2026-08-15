@@ -1,4 +1,4 @@
-import AS from "./data.js";
+import AS, { humanizeModelError } from "./data.js";
 const nameOf = id => (AS.AGENTS.find(a => a.id === id) || {}).name || id;
 const stanceLabel = s => ({ support: "support", oppose: "oppose", conditional: "conditional", insufficient: "insufficient" })[s] || s || "done";
 export function createMissionDriver({
@@ -6,7 +6,9 @@ export function createMissionDriver({
   log,
   setMission
 }) {
+  let gatherAt = 0;
   const gather = () => {
+    gatherAt = Date.now();
     const spots = AS.PLACES.meeting.spots;
     AS.AGENTS.forEach((a, i) => world.command(a.id, {
       goto: spots[i % spots.length],
@@ -14,10 +16,16 @@ export function createMissionDriver({
     }));
   };
   const disperse = () => {
-    AS.AGENTS.forEach(a => world.command(a.id, {
+    const run = () => AS.AGENTS.forEach(a => world.command(a.id, {
       goto: world.deskOf(a.id),
       state: "working"
     }));
+    const wait = Math.max(0, 4000 - (Date.now() - gatherAt));
+    if (!wait) return run();
+    const token = gatherAt;
+    setTimeout(() => {
+      if (gatherAt === token) run();
+    }, wait);
   };
   const glideTo = place => {
     if (!place || !world.glide) return;
@@ -186,6 +194,8 @@ export function createMissionDriver({
             });
             if (p.title) log(p.agentId, `${nameOf(p.agentId)} started: ${p.title}`);
           } else if (p.status === "done") {
+            const wa = world.agents.find(a => a.id === p.agentId);
+            if (wa && wa.stats) wa.stats.tasks++;
             if (p.simulated) say(p.agentId, "⚠ model unreachable — answered from offline fallback", 6, "warn");
             else if (p.say) say(p.agentId, p.say);
             log(p.agentId, `${nameOf(p.agentId)} concluded (${stanceLabel(p.stance)}${p.confidence ? ` · ${p.confidence}%` : ""}${p.simulated ? " · offline" : ""})`);
@@ -197,8 +207,7 @@ export function createMissionDriver({
             }
             setAurora(confN ? confSum / confN / 100 : null, 1);
           } else if (p.status === "failed") {
-            world.crash(p.agentId, p.error || "model unreachable");
-            log(p.agentId, `✗ ${nameOf(p.agentId)} hit an error — ${p.error || "model not responding"}`);
+            world.crash(p.agentId, humanizeModelError(p.error || "model unreachable"));
           }
           break;
         }
@@ -458,7 +467,7 @@ export function createMissionDriver({
       case "agent.takeover":
         feel(p.from, "skeptical", "mindblown", 4);
         mascot("worryFlag");
-        log(p.agentId, `⤴ ${nameOf(p.from)} hit an error (${p.reason || "model error"}) — ${nameOf(p.agentId)} is taking over`);
+        log(p.agentId, `⤴ ${nameOf(p.from)} hit an error (${humanizeModelError(p.reason || "model error")}) — ${nameOf(p.agentId)} is taking over`);
         break;
       case "verify.started":
         bump(3);

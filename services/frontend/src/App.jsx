@@ -3,7 +3,7 @@ import AS from "./data.js";
 import ASWorld from "./world/engine.js";
 import { api, session, connectEvents } from "./api.js";
 import { createMissionDriver } from "./missionDriver.js";
-import { TopBar, Dock, ZoomControls, ActivityFeed, Login, Onboarding, Toaster } from "./components/chrome.jsx";
+import { TopBar, Dock, ZoomControls, ActivityFeed, Login, Onboarding, Toaster, FirstRunGuide, ThemeCtx } from "./components/chrome.jsx";
 import { AgentPanel, AgentDashboard, MissionPanel, TasksPanel, MissionPill, IncidentPill, VerdictReveal, InboxPanel } from "./components/panels.jsx";
 import "./styles/agentsphere.css";
 const AMBIENT_LOG = {
@@ -136,9 +136,48 @@ function missionFromSnapshot(m) {
     } : null
   };
 }
+const firstrunKey = email => "agentsphere.firstrun." + (email || "");
 export default function App() {
   const [user, setUser] = React.useState(session.user);
   const [onboard, setOnboard] = React.useState(false);
+  const [themePref, setThemePref] = React.useState(() => {
+    try {
+      const v = localStorage.getItem("agentsphere.theme");
+      return v === "light" || v === "dark" ? v : null;
+    } catch {
+      return null;
+    }
+  });
+  const [sysDark, setSysDark] = React.useState(() => typeof window !== "undefined" && !!window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  React.useEffect(() => {
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = e => setSysDark(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  const theme = themePref || (sysDark ? "dark" : "light");
+  React.useLayoutEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+  const toggleTheme = React.useCallback(() => {
+    setThemePref(cur => {
+      const effective = cur || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      const next = effective === "dark" ? "light" : "dark";
+      try {
+        localStorage.setItem("agentsphere.theme", next);
+      } catch {}
+      return next;
+    });
+  }, []);
+  const [guide, setGuide] = React.useState(false);
+  const [composePrefill, setComposePrefill] = React.useState(null);
+  const closeGuide = React.useCallback(() => {
+    setGuide(false);
+    try {
+      if (user) localStorage.setItem(firstrunKey(user.email), "1");
+    } catch {}
+  }, [user]);
   const [squadLoaded, setSquadLoaded] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [clock, setClock] = React.useState("09:00");
@@ -150,6 +189,12 @@ export default function App() {
   const [agentStates, setAgentStates] = React.useState({});
   const [mission, setMission] = React.useState(null);
   const [composeIntent, setComposeIntent] = React.useState(false);
+  const useGuideChip = React.useCallback(text => {
+    setSelectedAgent(null);
+    setComposePrefill(text);
+    setComposeIntent(true);
+    setPanel("mission");
+  }, []);
   const [grantsByRole, setGrantsByRole] = React.useState({});
   const [verdict, setVerdict] = React.useState(null);
   const [briefings, setBriefings] = React.useState({
@@ -213,18 +258,28 @@ export default function App() {
   React.useEffect(() => {
     const onKey = e => {
       if (e.key !== "Escape") return;
+      if (verdict) {
+        setVerdict(null);
+        return;
+      }
+      if (settingsOpen) {
+        setSettingsOpen(false);
+        return;
+      }
       setSelectedAgent(null);
       setPanel(null);
       if (worldRef.current) worldRef.current.selected = null;
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [verdict, settingsOpen]);
   const hadReport = React.useRef(false);
   const wasClarifying = React.useRef(false);
+  const verdictFor = React.useRef(null);
   React.useEffect(() => {
     const has = !!mission?.report;
-    if (has && !hadReport.current) {
+    if (has && !hadReport.current && verdictFor.current !== mission.id) {
+      verdictFor.current = mission.id;
       setSelectedAgent(null);
       if (worldRef.current) worldRef.current.selected = null;
       setPanel("mission");
@@ -232,7 +287,8 @@ export default function App() {
       setVerdict({
         recommendation: mission.report.recommendation,
         confidence: mission.report.confidence,
-        decision: mission.meeting?.decision || mission.decision || null
+        decision: mission.meeting?.decision || mission.decision || null,
+        hadDebate: !!mission.meeting
       });
     }
     hadReport.current = has;
@@ -243,6 +299,15 @@ export default function App() {
     }
     wasClarifying.current = clarifying;
   }, [mission, selectedAgent]);
+  React.useEffect(() => {
+    if (!(mission?.done || mission?.failed)) return;
+    const w = worldRef.current;
+    if (!w) return;
+    const t = setTimeout(() => w.agents.forEach(a => {
+      if (a.state === "down") w.revive(a.id);
+    }), 4000);
+    return () => clearTimeout(t);
+  }, [mission?.done, mission?.failed]);
   React.useEffect(() => {
     const id = mission?.id;
     if (!id || mission.failed || mission.done && mission.report) return;
@@ -442,6 +507,7 @@ export default function App() {
   }, [mission?.done, mission?.failed, mission?.id, mission?.stopped, loadBriefings, toast]);
   const startMission = React.useCallback(async (title, depth) => {
     const resp = await api.startMission(title, depth);
+    closeGuide();
     setSelectedAgent(null);
     setPanel("mission");
     if (resp && resp.id) {
@@ -461,7 +527,7 @@ export default function App() {
       });
       toast(resp.status === "running" ? AS.STR.toast.assigned : AS.STR.toast.queued, "info");
     }
-  }, [toast]);
+  }, [toast, closeGuide]);
   const cancelMission = React.useCallback(id => {
     if (!id) return;
     toast("Stopping the mission…", "info");
@@ -492,6 +558,13 @@ export default function App() {
     try {
       await api.saveSquad(payload);
     } catch {}
+    if (onboard && user) {
+      let seen = false;
+      try {
+        seen = localStorage.getItem(firstrunKey(user.email)) === "1";
+      } catch {}
+      if (!seen) setGuide(true);
+    }
     setOnboard(false);
     setSettingsOpen(false);
     log(null, `Squad ready — ${AS.AGENTS.length} agents online`);
@@ -510,6 +583,8 @@ export default function App() {
     setSettingsOpen(false);
     setOnboard(false);
     setSquadLoaded(false);
+    setGuide(false);
+    setComposePrefill(null);
   }, []);
   React.useEffect(() => {
     const onUnauth = () => onLogout();
@@ -547,14 +622,15 @@ export default function App() {
   }} onCompose={() => setPanel("mission")} /> : panel === "tasks" ? <TasksPanel liveMission={mission} autoOpenId={inboxOpenId} onCompose={() => setPanel("mission")} onClose={() => {
     setPanel(null);
     setInboxOpenId(null);
-  }} /> : panel === "mission" ? <MissionPanel mission={mission} compose={composeIntent} onComposeChange={setComposeIntent} onClose={() => setPanel(null)} onAssign={startMission} onToast={toast} onSteer={(id, text) => api.steerMission(id, text).catch(() => toast(AS.STR.toast.assignFailed, "warn"))} onCancel={cancelMission} /> : null;
+  }} /> : panel === "mission" ? <MissionPanel mission={mission} compose={composeIntent} prefill={composePrefill} onPrefillConsumed={() => setComposePrefill(null)} onComposeChange={setComposeIntent} onClose={() => setPanel(null)} onAssign={startMission} onToast={toast} onSteer={(id, text) => api.steerMission(id, text).catch(() => toast(AS.STR.toast.assignFailed, "warn"))} onCancel={cancelMission} /> : null;
   const showApp = user && squadLoaded && !onboard && !settingsOpen;
-  return <div>
+  return <ThemeCtx.Provider value={theme}>
+      <div>
       <canvas id="world-canvas" ref={canvasRef}></canvas>
       <div className="as-root">
         <Toaster toasts={toasts} onDismiss={dismissToast} />
         {!user && <Login onLogin={onLogin} />}
-        {showApp && <TopBar clock={clock} worldName={AS.STR.worldName} onlineCount={AS.AGENTS.length} connected={connected} onSetup={() => setSettingsOpen(true)} user={user} onLogout={onLogout} />}
+        {showApp && <TopBar clock={clock} worldName={AS.STR.worldName} onlineCount={AS.AGENTS.length} connected={connected} onSetup={() => setSettingsOpen(true)} onTheme={toggleTheme} user={user} onLogout={onLogout} />}
         {showApp && (!online || !connected) && <div className={"as-conn-bar" + (!online ? " off" : "")} role="status">
             <span className="as-conn-dot"></span>
             {!online ? "You're offline — the squad keeps working on the server. Results will sync when you reconnect." : "Reconnecting to the live feed… your mission keeps running on the server."}
@@ -582,6 +658,7 @@ export default function App() {
         {showApp && rightContent}
         {showApp && <VerdictReveal verdict={verdict} onDismiss={() => setVerdict(null)} />}
         {showApp && <ZoomControls onZoom={zoom} />}
+        {showApp && guide && <FirstRunGuide onChip={useGuideChip} onDismiss={closeGuide} />}
         {showApp && <Dock active={dockActive} unread={briefings.unread} onSelect={dockSelect} onMission={() => {
         setSelectedAgent(null);
         setComposeIntent(true);
@@ -590,5 +667,6 @@ export default function App() {
         {user && squadLoaded && onboard && <Onboarding returning={false} user={user} onLogout={onLogout} onDone={finishOnboarding} onCancel={() => setOnboard(false)} />}
         {user && squadLoaded && !onboard && settingsOpen && <Onboarding returning={true} onDone={finishOnboarding} onCancel={() => setSettingsOpen(false)} />}
       </div>
-    </div>;
+      </div>
+    </ThemeCtx.Provider>;
 }

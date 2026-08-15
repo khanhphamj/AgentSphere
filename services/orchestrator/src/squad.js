@@ -4,7 +4,7 @@ export const DEFAULT_SQUAD = [{
   lead: true,
   name: "Atlas",
   provider: "openai",
-  models: ["openai/gpt-5-mini"]
+  models: ["openai/gpt-5"]
 }, {
   id: "nova",
   role: "worker",

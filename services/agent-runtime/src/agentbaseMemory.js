@@ -66,6 +66,9 @@ async function getToken(force = false) {
   }
 }
 
+export const iamCredsPresent = () => !!(CLIENT_ID && CLIENT_SECRET);
+export const getIamToken = getToken;
+
 async function api(method, path, { body, query, timeout = 8000 } = {}) {
   if (!memoryEnabled()) throw new Error("agentbase memory not enabled (missing IAM credentials)");
   let url = `${MEMORY_BASE_URL}${path}`;

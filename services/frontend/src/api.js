@@ -1,5 +1,16 @@
 const TOKEN_KEY = "agentsphere.token";
 const USER_KEY = "agentsphere.user";
+(() => {
+  const t = localStorage.getItem(TOKEN_KEY);
+  if (!t) return;
+  try {
+    const exp = JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).exp;
+    if (exp && exp * 1000 < Date.now() + 10_000) throw new Error("expired");
+  } catch {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  }
+})();
 export const session = {
   get token() {
     return localStorage.getItem(TOKEN_KEY);

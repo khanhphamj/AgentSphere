@@ -6,6 +6,8 @@ window.ReactDOM = {
   ...ReactDOM,
   ...ReactDOMClient
 };
+const rootEl = document.getElementById("root");
+rootEl.id = "as-app-mount";
 await new Promise((resolve, reject) => {
   const s = document.createElement("script");
   s.src = "/ds/ds-bundle.js";
@@ -16,7 +18,8 @@ await new Promise((resolve, reject) => {
   };
   document.head.appendChild(s);
 });
+rootEl.id = "root";
 const {
   default: App
 } = await import("./App.jsx");
-ReactDOMClient.createRoot(document.getElementById("root")).render(<App />);
+ReactDOMClient.createRoot(rootEl).render(<App />);

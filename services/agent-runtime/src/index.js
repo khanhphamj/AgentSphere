@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { chat, extractJson, listModels, SIM_FORCED, accountStore } from "./llm.js";
+import { chat, extractJson, listModels, modelsMeta, SIM_FORCED, accountStore } from "./llm.js";
 import { executeTool } from "./tools.js";
 import { LEAD_PERSONA, WORKER_PERSONA, PERSONAS, planPrompt, leadAnswerPrompt, runPrompt, reflectPrompt, meetingPrompt, synthesizePrompt, verifyPrompt, scenariosPrompt, reportPrompt, simulate } from "./prompts.js";
 import { planByCode, triageByCode, decideConsensus, assembleReport, buildSources, clampWords, synthesizeByCode, scenariosByCode } from "./harness.js";
@@ -9,6 +9,12 @@ import { strategyFor } from "./capabilities.js";
 import { loadLongTerm, shortTerm, memoryContext, remember, consolidate } from "./memory.js";
 import { health as memoryHealth, memoryConfigured } from "./agentbaseMemory.js";
 const PORT = Number(process.env.AGENT_RUNTIME_PORT || 8082);
+const mb = v => Math.round(v / 1048576);
+console.log(`[agent-runtime] boot rss=${mb(process.memoryUsage().rss)}MB`);
+setInterval(() => {
+  const mu = process.memoryUsage();
+  if (mb(mu.rss) > 700) console.log(`[agent-runtime] rss=${mb(mu.rss)}MB heapUsed=${mb(mu.heapUsed)}MB`);
+}, 300_000).unref();
 const trimToolResult = r => {
   if (r == null || typeof r !== "object") return r;
   if (Array.isArray(r.results)) return {
@@ -1006,8 +1012,13 @@ app.post("/meeting-turn", internalAuth, async (req, res) => {
 });
 app.get("/models", internalAuth, async (_req, res) => {
   const live = await listModels();
+  const meta = modelsMeta();
+  const ageMinutes = meta.at ? Math.round((Date.now() - meta.at) / 60_000) : null;
   res.json({
-    source: live ? "maas" : "fallback",
+    source: live ? (meta.via === "catalog" ? "maas-catalog" : ageMinutes !== null && ageMinutes <= 10 ? "maas" : "maas-cache") : "fallback",
+    fetchedAt: meta.at || null,
+    ageMinutes,
+    upstream: meta.failing ? "failing" : "ok",
     models: live || Object.keys(MODEL_LIMITS).map(id => ({
       id,
       ownedBy: id.split("/")[0]
@@ -1302,3 +1313,6 @@ app.use((err, _req, res, _next) => {
   if (!res.headersSent) res.status(500).json({ error: "internal error", detail: String(err?.message || err).slice(0, 200) });
 });
 app.listen(PORT, () => console.log(`[agent-runtime] listening on :${PORT} (policy: ${POLICY_URL})`));
+const MODELS_REFRESH_MS = Number(process.env.MODELS_REFRESH_MS || 900_000);
+listModels().catch(() => {});
+setInterval(() => listModels().catch(() => {}), MODELS_REFRESH_MS).unref();

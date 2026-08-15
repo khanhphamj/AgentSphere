@@ -2,7 +2,7 @@ import React from "react";
 import AS from "../data.js";
 import { api } from "../api.js";
 import { buildDossierHtml } from "../dossier.js";
-import { GlassPanel, DSIcon, StatusDot, agentPortrait, STATUS_COLOR } from "./chrome.jsx";
+import { GlassPanel, DSIcon, StatusDot, agentPortrait, STATUS_COLOR, LENS, useTheme } from "./chrome.jsx";
 const DSLG = () => (window.MSSDesignSystem_fa0208 || {}).LiquidGlass;
 function useWide() {
   const [wide, setWide] = React.useState(() => {
@@ -172,11 +172,11 @@ export function AgentPanel({
               <div className="as-col as-grow">
                 <span style={{
               font: "600 13px var(--font-body)",
-              color: "#B91C1C"
+              color: "var(--as-danger-ink)"
             }}>{P.crashedTitle}</span>
                 {st.err && <span style={{
               font: "500 11.5px var(--font-mono)",
-              color: "#DC2626"
+              color: "var(--as-danger-ink)"
             }}>{st.err}</span>}
               </div>
             </div>
@@ -269,9 +269,9 @@ export function AgentPanel({
 
         <div className="as-eyebrow">Stats</div>
         <div className="as-stat-grid">
-          <div className="as-stat"><b>{st.stats ? st.stats.uptime : "—"}</b><span>{P.uptime}</span></div>
+          <div className="as-stat"><b>{st.stats && st.stats.uptime != null ? st.stats.uptime : isDown ? "down" : "online"}</b><span>{P.uptime}</span></div>
           <div className="as-stat"><b>{st.stats ? st.stats.tasks : "—"}</b><span>{P.tasksDone}</span></div>
-          <div className="as-stat"><b>{st.stats ? st.stats.tokens : "—"}</b><span>{P.tokens}</span></div>
+          <div className="as-stat"><b>{st.stats ? typeof st.stats.tokens === "number" ? st.stats.tokens >= 1000 ? `${Math.round(st.stats.tokens / 1000)}K` : String(st.stats.tokens) : st.stats.tokens : "—"}</b><span>{P.tokens}</span></div>
         </div>
 
         {isLead ? <React.Fragment>
@@ -382,7 +382,8 @@ const STANCE_LABEL = {
   insufficient: "insufficient"
 };
 const FRAGILITY_LABEL = { solid: "solid", moderate: "moderate", brittle: "brittle" };
-const MISSION_STATUS_LABEL = { done: "Done", failed: "Failed", executing: "Running", planning: "Planning", meeting: "In meeting", reporting: "Reporting", clarifying: "Needs you", queued: "Queued", event: "Event" };
+const MISSION_STATUS_LABEL = { done: "Done", failed: "Failed", cancelled: "Cancelled", executing: "Running", planning: "Planning", meeting: "In meeting", reporting: "Reporting", clarifying: "Needs you", queued: "Queued", event: "Event" };
+const normText = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "d").toLowerCase();
 const scrollParent = el => {
   let n = el && el.parentElement;
   while (n) {
@@ -438,7 +439,7 @@ function OutcomeChips({ missionId, initial }) {
   return <div className="as-outcome">
       <span className="as-outcome-q">How did this pan out?</span>
       <div className="as-outcome-btns">
-        {OUTCOME_OPTS.map(([v, label]) => <button key={v} className={"as-outcome-btn" + (val === v ? " on" : "")} disabled={busy} onClick={() => pick(v)}>{label}</button>)}
+        {OUTCOME_OPTS.map(([v, label]) => <button key={v} className={"as-outcome-btn" + (val === v ? " on" : "")} aria-pressed={val === v} disabled={busy} onClick={() => pick(v)}>{label}</button>)}
       </div>
     </div>;
 }
@@ -835,6 +836,9 @@ function SteerBar({
       </div>
     </div>;
 }
+function fileSlug(title) {
+  return (title || "report").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").slice(0, 40).replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/^-+|-+$/g, "") || "report";
+}
 function downloadReport(mission) {
   const r = mission.report || {};
   const md = `# ${mission.title}\n\n${r.recommendation ? `**Recommendation:** ${r.recommendation}${r.confidence != null ? ` (confidence ${r.confidence}%)` : ""}\n\n` : ""}${r.markdown || ""}`;
@@ -842,7 +846,7 @@ function downloadReport(mission) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `agentsphere-${(mission.title || "report").slice(0, 40).replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/^-+|-+$/g, "") || "report"}.md`;
+  a.download = `agentsphere-${fileSlug(mission.title)}.md`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -866,7 +870,7 @@ function downloadDossier(mission) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `agentsphere-dossier-${(mission.title || "report").slice(0, 40).replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/^-+|-+$/g, "") || "report"}.html`;
+  a.download = `agentsphere-dossier-${fileSlug(mission.title)}.html`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -1217,6 +1221,12 @@ export function TasksPanel({
   const [list, setList] = React.useState(null);
   const [detail, setDetail] = React.useState(null);
   const [wide, toggleWide] = useWide();
+  const [query, setQuery] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState("all");
+  const shown = React.useMemo(() => {
+    const q = normText(query.trim());
+    return (list || []).filter(t => (statusFilter === "all" || t.status === statusFilter) && (!q || normText(t.title).includes(q)));
+  }, [list, query, statusFilter]);
   const load = React.useCallback(() => {
     api.listMissions().then(setList).catch(() => setList([]));
   }, []);
@@ -1284,7 +1294,14 @@ export function TasksPanel({
         {detail ? <MissionDetail mission={detail} /> : <React.Fragment>
             <StandingMissions />
             {list && list.length === 0 && <EmptyState emoji="📋" title="No missions yet" line="Assign a question or decision — the squad researches, debates, and returns one recommendation." cta="Create your first mission" onCta={onCompose} />}
-            {(list || []).map(t => <div key={t.id} className="as-card click" onClick={() => open(t.id)}>
+            {list && list.length > 0 && <div className="as-hist-tools">
+                <input className="as-input as-hist-search" type="search" value={query} placeholder={P.searchMissions} aria-label={P.searchMissions} onChange={e => setQuery(e.target.value)} />
+                <div className="as-hist-filters" role="group" aria-label={P.searchMissions}>
+                  {[["all", P.filterAll], ["done", P.filterDone], ["failed", P.filterFailed], ["cancelled", P.filterCancelled]].map(([id, label]) => <button key={id} type="button" className={"as-chip click" + (statusFilter === id ? " active" : "")} aria-pressed={statusFilter === id} onClick={() => setStatusFilter(id)}>{label}</button>)}
+                </div>
+              </div>}
+            {list && list.length > 0 && shown.length === 0 && <EmptyState emoji="🔍" title={P.searchEmptyTitle} line={P.searchEmptyLine} />}
+            {shown.map(t => <div key={t.id} className="as-card click" onClick={() => open(t.id)}>
                 <div className="as-row" style={{
             alignItems: "flex-start"
           }}>
@@ -1361,6 +1378,8 @@ export function InboxPanel({
 export function MissionPanel({
   mission,
   compose,
+  prefill,
+  onPrefillConsumed,
   onComposeChange,
   onClose,
   onAssign,
@@ -1396,6 +1415,11 @@ export function MissionPanel({
     setTimeout(autoGrow, 0);
     if (taRef.current) taRef.current.focus();
   };
+  React.useEffect(() => {
+    if (!prefill) return;
+    useExample(prefill);
+    onPrefillConsumed && onPrefillConsumed();
+  }, [prefill]);
   const ready = !!(mission && mission.done && mission.report);
   const showForm = !mission || compose && mission.done;
   React.useEffect(() => {
@@ -1573,7 +1597,7 @@ export function VerdictReveal({
         {d && <span className={"as-verdict-stamp " + (positive ? "ok" : "hold")}>{DEC_LABEL[d] || d}</span>}
         <div className="as-verdict-rec">{verdict.recommendation}</div>
         <button className="as-btn primary as-verdict-cta" onClick={onDismiss}>
-          View full report<span>report · sources · debate</span>
+          View full report<span>{verdict.hadDebate ? "report · sources · debate" : "report · sources"}</span>
         </button>
       </div>
     </div>;
@@ -1582,6 +1606,7 @@ export function MissionPill({
   mission,
   onClick
 }) {
+  const theme = useTheme();
   if (!mission) return null;
   const isEvent = mission.phase === "event";
   const total = mission.subtasks.length;
@@ -1605,7 +1630,7 @@ export function MissionPill({
     </div>;
   const Host = DSLG();
   if (!Host) return <div className="as-mission-pill-host">{inner}</div>;
-  return <Host className="as-mission-pill-host" radius={999} hoverLift={false} refraction={false}>
+  return <Host className="as-mission-pill-host" radius={999} hoverLift={false} refraction={LENS} theme={theme}>
       {inner}
     </Host>;
 }
@@ -1617,6 +1642,7 @@ export function IncidentPill({
   onOpen,
   onLocate
 }) {
+  const theme = useTheme();
   const def = AS.AGENTS.find(a => a.id === agentId);
   if (!def) return null;
   const reviving = state === "reviving";
@@ -1634,7 +1660,7 @@ export function IncidentPill({
   const Host = DSLG();
   const cls = "as-incident-host" + (offset ? " push" : "");
   if (!Host) return <div className={cls}>{inner}</div>;
-  return <Host className={cls} radius={999} hoverLift={false} refraction={false}>
+  return <Host className={cls} radius={999} hoverLift={false} refraction={LENS} theme={theme}>
       {inner}
     </Host>;
 }

@@ -114,10 +114,10 @@ scenario pass on top of the adaptive phase loop.
 
 | service | port | responsibility |
 |---|---|---|
-| `frontend` | 5173 | Pixel campus + Liquid Glass UI (Vite + React, design-system bundle). World art follows a **Mistral-icon pixel craft**: every object (trees, furniture, water bodies, agent sprites, turbines, brand letters) keeps its natural template color but is drawn with a 1px outline in the darkest step of its *own* hue, 3-4 flat shade tones (light top-left → dark bottom-right, derived from the base hex via the local `shade`/`shadeHex` helpers), sparse 1-2px white glints on glass/water/metal, and stair-stepped corners; ground tiles stay flat. Scheduled world fx (e.g. the delayed basketball `flash`) are skipped by the render loop until their `t0` arrives — a future-scheduled fx previously fed a negative radius into `ctx.arc` and aborted the frame's fx pass. **The map is the real VNG Campus floor plan** (user-provided layout): central skylit ATRIUM (glass-grid tile + spotlit planter island modeled on the real lobby photos), MAIN LOBBY (charcoal slate, white slat feature walls, red WE ARE VNG lettering) opening to CỬA CHÍNH and two car parks (bãi xe 8/10 chỗ with pixel sedans), meeting band + GAME CORNER arcade row north of the atrium, Seating Area lounge, Văn Phòng 02 squad office (six desks) + decorative VP offices, east service wing (IT Helpdesk, Pantry, Phòng Y Tế, Phòng Đa Năng housing the gym), outdoor NE swimming pool + round spa, 7-Eleven street-facing store, delivery-road roundabout with the giant "Cây Lộc Vừng SIUUU TO", and a basketball court; football pitch/lake were removed with the engine's sport/photo/plane/camera systems retargeted (new tiles ATRIUM/LOBBY/SLAT/PARK/CORR ids 18-22, PLACES/HUDDLES/deskTiles rewritten to the new coordinates, BFS-verified walkability over every door/spot/desk). **Agents are social**: an ambient duo-chat system (`stepDuos`) sends pairs of free agents to face each other at lobby/atrium/pantry/seating spots exchanging `AMBIENT_DUO` lines with nod/laugh reactions, passing agents pause and wave at each other (60s per-pair cooldown), bus-message walk-overs slide a paper pixel between sender and recipient, celebrations trigger paired high-fives with a gold-star burst, and morning hours bias relaxation toward the lobby/atrium hubs. **Animation layer** (pixel-anim-life): humans walk a 4-phase weighted gait with counter-phase arm swing and shadow squash, idle with per-agent-phase breathing/blink/weight-shift, type with alternating hands + laptop glints, swim a 4-phase stroke with splash particles, and exercise with staged bar/dumbbell sequences + sweat drops; the world adds viewport-only water shimmer, butterflies over flowers, occasional bird flocks with ground shadows, coffee steam, blinking desk monitors, speech-bubble pop-in, and varied leaf flutter — all integer-snapped with hard particle caps so the rAF loop stays at 60fps. **The environment is natively reactive**: doors slide open when someone approaches (3-state overlay per DOOR tile), desk monitors are dark until their agent sits (with a 1-frame boot flash), night brings warm light pools under the atrium/lobby spotlights and office windows, swimmers leave fading wet footprints on the deck, and slate floors give shine ticks instead of grass dust; agents also USE the world — pantry visits brew a coffee they carry back and sip at their desk (`a.coffeeUntil`), Game Corner sessions play out with screen-flash + button-mash and win/lose (or versus) endings, seating-area visitors sit ON the sofas, 7-Eleven runs end with bench snacking, the lộc vừng sheds petals that can land on a visitor's head, revived agents rest on the Phòng Y Tế medbed, and once per in-world day a car commutes into the parking lot dropping off a staff extra who walks through Cửa Chính into the lobby. **Premium elevation pass**: porcelain floor grade with per-zone materials (corridor porcelain, sage meeting carpet, bordered rugs), a run-aware wall system (greige face + dark cap + ink outline + baseboard + ambient-occlusion contact shadows), window strips casting daylight patches, atrium benches/corner planters/diagonal skylight bands, lobby pendants + reception rug + door sheen, wall art/bookshelves/storage so no room reads empty, large/small tree variety over a desaturated mow-striped lawn, curbs + zebra crosswalk + numbered parking bays, an always-on 4-step vignette, NW-unified shadows, and indoor zone labels as wall plaques (outdoor keep wooden posts); the Liquid-Glass chrome runs on a token system (radius/8pt spacing/ink scale/glass blur+saturate/two-layer shadows/150ms easing) with tabular clock, status-ring avatars, micro-label headers, dock glow-pill active state and ink-green CTAs |
+| `frontend` | 5173 | Pixel campus + Liquid Glass UI (Vite + React, design-system bundle). World art follows a **Pokémon Gen-5 (B/W) overworld re-skin** (2026-08-13, supersedes the Mistral pixel craft): hand-authored procedural painters (no assets, no Nintendo material) with **hue-shifted ramps** — shadows lean blue/violet, highlights lean warm — anchored on grass `#6DB24A`, canopy `#3F8A34/#63B04A/#1F4A1C`, water `#3F93D6` + `#EEF6FB` foam edges, cobble `#9A948A`, roofs `#4F7FD0`; textured grass tufts/blades, dense bubbly border forest + landmark lộc vừng, warm-cream interior tile with subtle checker + seam/AO lines, sky-lit atrium checker, Gen-5 wave-band pool with lane line. **Agents are chibi** (10×9 head, hair gloss, ramped 3-tone clothes via the `g5tones`/`mixHex` helpers precomputed per agent — cheaper per frame than the old `shadeHex` calls) while every animation driver (4-phase gait, swim, sit, exercise, socials) is untouched; nametags/critter labels are slate-navy signage plates with a cream top highlight, and speech bubbles always paint above zone labels. Day/night tint stops retuned to Gen-5 moods, and `world.timeOverride` (set via `window.ASWORLD.timeOverride = minutes`, `null` to release) freezes the world clock for demos/screenshots. Scheduled world fx (e.g. the delayed basketball `flash`) are skipped by the render loop until their `t0` arrives — a future-scheduled fx previously fed a negative radius into `ctx.arc` and aborted the frame's fx pass. **The map is the real VNG Campus floor plan** (user-provided layout): central skylit ATRIUM (glass-grid tile + spotlit planter island modeled on the real lobby photos), MAIN LOBBY (charcoal slate, white slat feature walls, red WE ARE VNG lettering) opening to CỬA CHÍNH and two car parks (bãi xe 8/10 chỗ with pixel sedans), meeting band + GAME CORNER arcade row north of the atrium, Seating Area lounge, Văn Phòng 02 squad office (six desks) + decorative VP offices, east service wing (IT Helpdesk, Pantry, Phòng Y Tế, Phòng Đa Năng housing the gym), outdoor NE swimming pool + round spa, 7-Eleven street-facing store, delivery-road roundabout with the giant "Cây Lộc Vừng SIUUU TO", and a basketball court; football pitch/lake were removed with the engine's sport/photo/plane/camera systems retargeted (new tiles ATRIUM/LOBBY/SLAT/PARK/CORR ids 18-22, PLACES/HUDDLES/deskTiles rewritten to the new coordinates, BFS-verified walkability over every door/spot/desk). **Agents are social**: an ambient duo-chat system (`stepDuos`) sends pairs of free agents to face each other at lobby/atrium/pantry/seating spots exchanging `AMBIENT_DUO` lines with nod/laugh reactions, passing agents pause and wave at each other (60s per-pair cooldown), bus-message walk-overs slide a paper pixel between sender and recipient, celebrations trigger paired high-fives with a gold-star burst, and morning hours bias relaxation toward the lobby/atrium hubs. **Animation layer** (pixel-anim-life): humans walk a 4-phase weighted gait with counter-phase arm swing and shadow squash, idle with per-agent-phase breathing/blink/weight-shift, type with alternating hands + laptop glints, swim a 4-phase stroke with splash particles, and exercise with staged bar/dumbbell sequences + sweat drops; the world adds viewport-only water shimmer, butterflies over flowers, occasional bird flocks with ground shadows, coffee steam, blinking desk monitors, speech-bubble pop-in, and varied leaf flutter — all integer-snapped with hard particle caps so the rAF loop stays at 60fps. **World life pack (2026-08-13)**: visible speech/error bubbles collect into a fixed 8-slot pool and stack vertically when their screen rects collide (newest shifts up, oldest stays put); mission meetings seat every agent on a **distinct** chair facing the table with a pulsing provider-hue ring under the active speaker and ambient nods from listeners, and a gather holds placement ≥4s before honoring a fast disperse so quick missions still read; a **daily rhythm** runs once per world-day each — ~09:00 stand-up around the lead's desk, ~12:00 lunch wave to pantry/7-Eleven/lobby, ~18:00 wind-down group at Cửa Chính — only ever recruiting free agents (missions always win; `world.forceRhythm(kind)` triggers one for QA/demo); a **campus cat** sleeps on sofas, wanders (never into the pool), trails a random agent and tail-flicks (`world.cat`); **weather** adds pre-rendered drifting cloud shadows, a rare capped 120-drop rain shower with deepened tint and fading outdoor puddles (`world.forceWeather(bool)`), all viewport-only and skipped while the tab is hidden; agent/mascot/cat shadows scale with the sun's hour; and fresh squads spawn on non-pool walkable tiles. **The environment is natively reactive**: doors slide open when someone approaches (3-state overlay per DOOR tile), desk monitors are dark until their agent sits (with a 1-frame boot flash), night brings warm light pools under the atrium/lobby spotlights and office windows, swimmers leave fading wet footprints on the deck, and slate floors give shine ticks instead of grass dust; agents also USE the world — pantry visits brew a coffee they carry back and sip at their desk (`a.coffeeUntil`), Game Corner sessions play out with screen-flash + button-mash and win/lose (or versus) endings, seating-area visitors sit ON the sofas, 7-Eleven runs end with bench snacking, the lộc vừng sheds petals that can land on a visitor's head, revived agents rest on the Phòng Y Tế medbed, and once per in-world day a car commutes into the parking lot dropping off a staff extra who walks through Cửa Chính into the lobby. **Premium elevation pass**: porcelain floor grade with per-zone materials (corridor porcelain, sage meeting carpet, bordered rugs), a run-aware wall system (greige face + dark cap + ink outline + baseboard + ambient-occlusion contact shadows), window strips casting daylight patches, atrium benches/corner planters/diagonal skylight bands, lobby pendants + reception rug + door sheen, wall art/bookshelves/storage so no room reads empty, large/small tree variety over a desaturated mow-striped lawn, curbs + zebra crosswalk + numbered parking bays, an always-on 4-step vignette, NW-unified shadows, and indoor zone labels as wall plaques (outdoor keep wooden posts); the Liquid-Glass chrome runs on a token system (radius/8pt spacing/ink scale/glass blur+saturate/two-layer shadows/150ms easing) with tabular clock, status-ring avatars, micro-label headers, dock glow-pill active state and ink-green CTAs |
 | `gateway` | 8080 | Auth (work email → Google Authenticator TOTP → JWT), REST/WS proxy (verifies the JWT on the `/ws` upgrade and injects a trusted `x-user-email`), attaches internal client credentials, snapshots the user's squad onto `POST /missions`, returns clean JSON errors (a JSON-parse-error handler avoids leaking stack traces) |
 | `db` | 5433 | Postgres 16 — user accounts (TOTP), per-account squads, mission history |
-| `orchestrator` | 8081 | Bounded per-account mission scheduler (watchdog + deadline), consensus meeting, fail-closed real-time event hub (WS with per-owner replay from a DB-persisted `mission_events` log) |
+| `orchestrator` | 8081 | Bounded per-account mission scheduler (watchdog + deadline), consensus meeting, fail-closed real-time event hub (WS with per-owner replay from a DB-persisted `mission_events` log), bounded LRU mission cache with lazy Postgres rehydrate |
 | `agent-runtime` | 8082 | Harness layer: runs one agent step — model calls with policy-gated tools |
 | `mcp-policy` | 8083 | MCP server registry + **Policy Groups**: which servers/tools each role may use |
 
@@ -188,7 +188,9 @@ fast-path/degraded-mode fallback. WS reconnect replay and `GET /missions/:id/eve
 serve from the DB, so a mission's full transcript survives an orchestrator restart and
 is not subject to the in-memory buffer's 30-mission cap. (A mission that was *executing*
 when the orchestrator restarted is still marked failed — execution does not auto-resume —
-but its transcript is now replayable and the owner gets a failure briefing.)
+but its transcript is now replayable and the owner gets a failure briefing.) The log is
+**retained for 30 days** (`MISSION_EVENTS_TTL_DAYS`): a sweep on boot + every 24h deletes
+older `mission_events` rows so the table can't grow without bound.
 
 **Per-account LLM circuit breaker.** The agent-runtime breaker (`llm.js`) is keyed by
 `account|model`, with the account derived from the gateway-/pipeline-forwarded
@@ -242,6 +244,8 @@ reproducible:
 | **search grounding enforced** — if every search a specialist ran came back `lowRelevance`, the run is treated as not-grounded: confidence is capped and a support/oppose stance is softened to conditional, and low-relevance hits are excluded from the "did we get data?" test, so the model can't project confidence onto off-topic results | code (`index.js`) |
 | **anti-stale-knowledge (harness-enforced grounding)** — the model used to answer current-state questions from its *training memory* (e.g. naming "qwen2.5" when the current release is newer). Rather than *instruct* the model to search, the **harness pre-fetches**: for the Research role it runs a recency-aware `web.search` itself (server-side, deterministic, before the model reasons) and injects the live results into the agent's context, so it grounds in current data regardless of what it recalls or whether it would have chosen to search. The pre-fetched result is recorded as real evidence (cached, shared with later searches). Any research/analyst run that *still* produced an answer with **no grounded tool result** has its confidence capped and is labelled "not grounded in a live source — may be outdated" | code (`index.js`) |
 | **prompt-policy block** — a provider 400 that flags a prompt as violating usage policy (`PromptBlocked`/`isPromptBlocked` in `llm.js`) is detected specifically: it does **not** trip the circuit breaker (the model is healthy, the prompt was rejected), is **not** retried across every model, and degrades to the offline fallback with a clean `"prompt blocked by provider usage policy"` label (even when `LLM_SIMULATION=off`) — so a flagged question never surfaces a raw 400 or 500-crashes a mission | code (`llm.js`) |
+| **human-readable model errors, one line per incident** — provider HTTP errors are compacted at the throw site (`llmHttpError` in `llm.js`: parse the JSON body, keep only the provider `message`, strip `request_id`/braces, cap 140 chars) and the frontend maps whatever survives to a short label (`humanizeModelError` in `data.js`: 403/quota → "model access blocked (quota/credit — 403)", 429, timeout, unreachable, unusable-format), used by the canvas crash bubble, the takeover line and the activity feed; the driver's duplicate "hit an error" log line was removed and the engine ignores re-crashes of an already-down agent, so one agent failure = one bubble + one feed line, never a raw JSON splat | code (`llm.js`, `data.js`, `missionDriver.js`) |
+| **world state resets with the mission** — when a mission reaches a terminal state every still-crashed agent is auto-revived 4s later (no more "Agent unresponsive" banners hours after the run), and agent profile stats are session-real (tasks count actual completed subtasks from `agent.progress done`; uptime shows online/down; nothing is seeded from hashes) | code (`App.jsx`, `missionDriver.js`, `engine.js`) |
 | **synthetic-output marking in memory** — offline-fallback conclusions are tagged in long-term memory and labelled "(synthetic, treat as weak)" when recalled, so fabricated precedents don't masquerade as real experience; lessons dedupe by mission title | code (`memory.js`) |
 | **conflict check** — hold a consensus meeting when the squad genuinely disagrees: ≥2 distinct stance camps present **and** at least one definite lean (a `support` or an `oppose`), so a `support`-vs-`conditional` split debates too — not only the rare hard `oppose`-vs-`support` (`pipeline.js`) | code |
 | **debate turns** (`/meeting-turn`) | **model** |
@@ -622,6 +626,14 @@ cap so one user can't monopolise the squad; `MISSION_DEADLINE_MS` (default `6000
 watchdog ceiling after which a mission's model calls are aborted and it is marked failed;
 `MAX_PHASES` (default `3`) — max adaptive phases the lead can open before it must conclude.
 
+**Memory/retention tuning (optional `.env`):** `MISSION_CACHE_MAX` (default `200`) — max
+finished missions kept in orchestrator RAM when Postgres is reachable (older ones are
+evicted LRU and lazy-loaded back on demand); `MISSION_RAM_ONLY_MAX` (default `300`) — hard
+cap when running without a database, where eviction drops the oldest finished missions
+for good; `MISSION_EVENTS_TTL_DAYS` (default `30`) — retention window for the
+`mission_events` log. All three services log their boot RSS and warn every 5 minutes
+whenever RSS exceeds 700MB.
+
 ### Deploy to GreenNode AgentBase (all-in-one container)
 
 AgentBase Custom Agent runs **one** container on port 8080 with `/health`, so the
@@ -648,7 +660,10 @@ Keep replicas at **1** (the bundled Postgres + in-memory session state are
 per-container). The bundled Postgres is **ephemeral** — its data is lost on pod
 restart/redeploy; for durable storage point `DATABASE_URL` at an external managed
 Postgres in the deploy env file (it overrides the baked localhost one). Redeploys
-use `runtime.sh update <runtime-id> ...` with the same flags.
+use `runtime.sh update <runtime-id> ...` with the same flags. The orchestrator's
+mission cache is bounded either way: with a reachable DB it holds ~200 finished
+missions (older ones lazy-load back on demand); without one it hard-caps at ~300
+and the oldest finished missions are dropped, so RAM stays flat on long-lived pods.
 
 **Login:** work email → scan the QR with Google Authenticator (first time) →
 enter the 6-digit app code. Re-logins skip straight to the code.
@@ -661,7 +676,15 @@ The campus clock and day/night tint follow real time in UTC+7 (Asia/Ho_Chi_Minh)
 ```
 POST /auth/request-code {email}            → {mode:"enroll", otpauth, secret} | {mode:"totp"}
 POST /auth/verify       {email, code}      → {token, user}   (code = Google Authenticator TOTP)
-GET  /api/models                           → {source, models[]}   (enabled MaaS models, cached)
+GET  /api/models                           → {source, fetchedAt, ageMinutes, upstream, models[]}
+                                             source: "maas" (fresh ≤10min, probe-verified) | "maas-cache" (stale disk cache)
+                                             | "maas-catalog" (live catalog via the AIP management API + IAM creds — used
+                                             automatically when the MaaS data-plane fails, e.g. quota-blocked; models are
+                                             listed but not probe-verified) | "fallback"; upstream: "ok" | "failing".
+                                             The catalog self-updates: refresh at boot + every MODELS_REFRESH_MS (default
+                                             15min), failed data-plane fetches are negative-cached 60s, the management-API
+                                             fallback is throttled to once/5min, and successful lists persist to
+                                             services/agent-runtime/data/models.json (survives restarts)
 POST /api/missions      {title}            → {id, language, status}   (one at a time)
 POST /api/missions/:id/clarify {answer}    → resumes a clarifying mission
 GET  /api/missions                         → mission history (status, decision, confidence)
@@ -715,6 +738,40 @@ every beat below is driven 1:1 by real pipeline events (no faked progress):
   questions they can click — one tap fills the box, the chips collapse, and
   *Assign* enables. Turns "what do I even ask?" into a starting point
   (`MissionPanel`, `STR.panel.missionExamples`)
+- **First-run guide card** — the moment a *fresh* squad is created (first-run
+  onboarding only, not the settings reopen), a dismissible Liquid-Glass card
+  slides up above the dock: "Your squad is ready", a one-line pitch, and three
+  tappable example chips (Postgres-vs-MongoDB, Slack-vs-Zalo, new-POD-in-HCM);
+  clicking a chip opens the composer prefilled with that question (a `prefill`
+  prop on `MissionPanel` rides the same path as the compose chips). Dismissed by
+  the ✕, and auto-dismissed the first time a mission is assigned; either way it
+  persists per account (`localStorage agentsphere.firstrun.<email>`) so it never
+  returns (`FirstRunGuide` in `chrome.jsx`, strings in `STR.guide`)
+- **Dark mode (Liquid Glass dark)** — a moon/sun `.as-icon-btn` in the top-bar
+  right pill cycles light↔dark; the choice persists (`localStorage
+  agentsphere.theme`) and, when unset, follows `prefers-color-scheme` live via a
+  `matchMedia` listener. The effective theme lands on
+  `document.documentElement.dataset.theme`, a `:root[data-theme="dark"]` token
+  block flips the ink scale / lines / glass background / rim / shadows plus
+  every chrome surface (cards, inputs, selects, toasts, verdict card, jump bar,
+  debate bubbles, dock indicator…), and a `ThemeCtx` React context (defined in
+  `chrome.jsx`, provided by `App`) threads the `theme` prop into every
+  `LiquidGlass`/`GlassDock` host so the DS glass re-renders on toggle. The pixel
+  world canvas keeps its own day/night tint — only the chrome flips
+- **Frontier-lead default squad** — the default lead (Atlas) now runs
+  `openai/gpt-5` while the five workers stay on fast/cheap diverse models — the
+  mix is intentional: a frontier-tier orchestrator plans, checks and
+  synthesizes; workers fan out. Frontend `data.js AGENTS` and orchestrator
+  `squad.js DEFAULT_SQUAD` carry the identical default, and the squad-setup
+  screen shows a tip ("keep a frontier-tier lead — workers can stay fast/cheap")
+  plus the lead's `reasoning` tier chip
+- **Mission history search + filter** — the Missions panel history gets a glass
+  search input (diacritic-insensitive: NFD-normalized, combining marks stripped,
+  `đ→d`, case-folded — "slack", "Slắck" and "SLACK" all match) plus
+  All / Done / Failed / Cancelled status chips (`aria-pressed`). Filtering is
+  client-side over the already-loaded list (one `useMemo`), and when everything
+  is filtered out a "No matches" `EmptyState` variant appears instead of a blank
+  panel (`TasksPanel`, `normText`)
 - **Live subtask counter** — while a mission executes, the status row appends
   `· N/M subtasks`, ticking up as each specialist finishes (same
   `subtasks[].status` the agent pills already track). The abstract "Executing…"
@@ -980,7 +1037,23 @@ The UI implements the Claude Design handoff (`AgentSphere.html`) 1:1:
 - **Liquid Glass** chrome from the MSS/GreenNode design system bundle: split top-bar
   islands, dock with the water-glide white indicator (Agents · Activity ·
   Missions · New task), right-side sliding panels, iOS-26 one-panel-at-a-time
-  behavior
+  behavior. **Native iOS 26 pass (2026-08-13)**: the DS bundle's Liquid Glass engine is
+  now switched ON per surface — SVG-displacement **edge lensing** (`refraction` +
+  `refractionScale`, applied as `backdrop-filter: url(#lgfN) blur() saturate()`) on the
+  top-bar pills, dock, panels, login/onboarding cards and mission/incident pills,
+  pointer-tracked **specular highlight**, `sheen`, and **spring press** on the dock.
+  Lensing is feature-gated in app code (`LENS = CSS.supports("backdrop-filter",
+  "url(#lg) blur(2px)")` in `chrome.jsx`) so Safari/Firefox — where `url()` in
+  `backdrop-filter` would invalidate the whole declaration — fall back to plain
+  blur+saturate glass. Token upgrade in `agentsphere.css`: radius scale 12/16/22/28
+  (concentric), glass `rgba(253,254,252,0.66)` + `blur(28px) saturate(1.85)`, two-layer
+  soft shadows + specular rim (`--as-rim`), Apple-curve easing
+  `cubic-bezier(0.32,0.72,0,1)` + `--as-spring` press curve; **capsule buttons**
+  (pill radius, gradient CTA, hover lift + scale-press), glassier inputs/toasts
+  (capsule toast), iOS-style modal scrim (16px backdrop blur) and a frosted verdict
+  card (28px radius, 40px blur). `prefers-reduced-transparency` collapses glass to
+  near-solid; the canvas RAF loop stays at 60fps with lensing on (measured
+  mean 16.65ms / p95 17.6ms / 0 long tasks)
 - **World Pixel icon set**: the dock and Mission CTA use chunky multi-tone
   **Mistral-style pixel-art objects** (`components/pixelIcons.jsx`) instead of
   vector design-system icons — each is a 16×16 bitmap where every cell is a
@@ -994,7 +1067,14 @@ The UI implements the Claude Design handoff (`AgentSphere.html`) 1:1:
 - **Missions panel**: history of every mission with status, creation time and a
   one-line verdict; open any of them to revisit the conclusion, full report,
   subtasks and the debate transcript. History persists in Postgres and survives
-  restarts (a mission interrupted mid-run is marked `failed`). When a live
+  restarts (a mission interrupted mid-run is marked `failed`). The orchestrator
+  keeps a **bounded RAM cache**, not the whole history: every non-terminal mission
+  plus the ~200 most-recently-touched finished ones (LRU); boot restores only the
+  active missions + the ~100 most recent finished ones, the list endpoint is served
+  by an indexed per-user Postgres query (most recent 100), and opening an older
+  mission **lazy-loads its row from Postgres** back into the cache — so any mission
+  in history still opens, while orchestrator RAM stays flat no matter how many
+  missions accumulate. When a live
   mission finishes, the mission panel **opens itself conclusion-first** and
   takes over from any other open panel or agent view: a "Report ready" cue,
   then verdict + decision + confidence on top (scrolled to top), then the full

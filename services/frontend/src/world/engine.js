@@ -60,7 +60,12 @@ const ASWorld = (() => {
   const inWater = (x, y) => M.g(x, y) === M.POOL;
   function nearestWalkable(x, y) {
     if (M.walkable(x, y)) return [x, y];
-    for (let r = 1; r < 6; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (M.walkable(x + dx, y + dy)) return [x + dx, y + dy];
+    for (let r = 1; r < 12; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (M.walkable(x + dx, y + dy)) return [x + dx, y + dy];
+    return [x, y];
+  }
+  function nearestSpawn(x, y) {
+    if (M.walkable(x, y) && M.g(x, y) !== M.POOL) return [x, y];
+    for (let r = 1; r < 12; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (M.walkable(x + dx, y + dy) && M.g(x + dx, y + dy) !== M.POOL) return [x + dx, y + dy];
     return [x, y];
   }
   function losWalkable(x0, y0, x1, y1) {
@@ -87,8 +92,26 @@ const ASWorld = (() => {
     const b = Math.max(0, Math.min(255, (n & 255) + amt));
     return `rgb(${r},${g2},${b})`;
   }
-  const LEAF_COLORS = ["#7FB069", "#C9A04E", "#D98E5A", "#9CC97A", "#E0A458", "#EF9BB1", "#F2D06B"];
-  const BFLY_COLORS = ["#EF9BB1", "#F2D06B", "#F4F1E6"];
+  function mixHex(a, b, k) {
+    const A = parseInt(a.slice(1), 16),
+      B = parseInt(b.slice(1), 16);
+    const r = (A >> 16) + ((B >> 16) - (A >> 16)) * k | 0;
+    const g2 = (A >> 8 & 255) + ((B >> 8 & 255) - (A >> 8 & 255)) * k | 0;
+    const bl = (A & 255) + ((B & 255) - (A & 255)) * k | 0;
+    return `rgb(${r},${g2},${bl})`;
+  }
+  function g5tones(base) {
+    return {
+      o: mixHex(base, "#1A2036", 0.66),
+      d: mixHex(base, "#232840", 0.32),
+      b: base,
+      l: mixHex(base, "#FFE9A8", 0.26),
+      h: mixHex(base, "#FFF6D8", 0.5)
+    };
+  }
+  const PANTS = g5tones("#4A4440");
+  const LEAF_COLORS = ["#63B04A", "#C9A04E", "#D98E5A", "#8CCB6D", "#E0A458", "#F2A6C6", "#F2D06B"];
+  const BFLY_COLORS = ["#F2A6C6", "#F2D06B", "#F8F6EC"];
   const TILE_WATER = 2;
   const TILE_FLOWER = 4;
   const FLOWER_TILES = [];
@@ -127,19 +150,19 @@ const ASWorld = (() => {
   const CAR_CO = shadeHex(CAR_CC, -70);
   const CAR_HL = shadeHex(CAR_CC, 28);
   const CAR_DK = shadeHex(CAR_CC, -22);
-  const PETAL_A = "#EF9BB1";
+  const PETAL_A = "#F2A6C6";
   const PETAL_B = "#E8557A";
-  const PETAL_FADE = "#D8A8B4";
+  const PETAL_FADE = "#DCA8C4";
   const DOORS = [];
   for (let dy = 0; dy < M.H; dy++) for (let dx = 0; dx < M.W; dx++) if (M.g(dx, dy) === 8) DOORS.push({ x: dx * T, y: dy * T, cx: dx * T + 8, cy: dy * T + 8, sr: dx % 2 === 1, o: 0, f: -1 });
-  const DOOR_DARK = "#3F372B";
-  const DOOR_FLOOR = "#5A4C3A";
-  const DOOR_EDGE = "#8A7A63";
+  const DOOR_DARK = "#2A241C";
+  const DOOR_FLOOR = "#54483A";
+  const DOOR_EDGE = "#9A7E52";
   const NIGHT_LIGHTS = [[632, 246], [712, 246], [632, 298], [712, 298], [664, 436], [716, 436], [768, 436], [200, 546], [280, 546], [360, 546], [488, 498], [600, 498]];
   const NL_ROW_X = [-2, -4, -5, -4, -2];
   const NL_ROW_W = [4, 8, 10, 8, 4];
-  const NL_FILL = "rgba(242,217,160,0.16)";
-  const NL_CORE = "rgba(242,217,160,0.15)";
+  const NL_FILL = "rgba(255,204,110,0.18)";
+  const NL_CORE = "rgba(255,214,130,0.16)";
   const NL_POOL_GLOW = "rgba(191,232,255,0.22)";
   const VIG_STEPS = [0.05, 0.03, 0.02, 0.01];
   const FOOT_FRESH = "#A5A495";
@@ -156,6 +179,91 @@ const ASWorld = (() => {
     cool: [86, 128, 196, 0.2]
   };
   const CONFETTI_COLORS = ["#EC5E27", "#00B14F", "#0068FF", "#00C160", "#F5C518", "#7C5CE0", "#FF6FAE"];
+  const OUTDOOR_TIDS = [0, 1, 4, 10, 14, 15, 16, 21];
+  const CAT_C = "#6A6F7E";
+  const CAT_O = "#383E52";
+  const CAT_D = "#545A6C";
+  const CAT_L = "#8A90A4";
+  const CAT_W = "#F5F4EF";
+  const CAT_EYE = "#9ED45C";
+  const RAIN_COL = "rgba(96,126,172,0.6)";
+  const RAIN_COL2 = "rgba(148,176,212,0.5)";
+  const PUD_BASE = "#9CC6E8";
+  const PUD_DK = "#5E82AC";
+  const PUD_GL = "#F6FBFF";
+  const RAIN_N = 120;
+  const PUD_N = 6;
+  let SH_MUL = 1;
+  let SH_HW0 = 5;
+  let SH_HW1 = 3;
+  const CAT_NAPS = [];
+  for (const fu of M.FURNITURE) {
+    if (fu.kind === "sofa") CAT_NAPS.push({ x: fu.x, y: fu.y + 1, sx: fu.x * T + 16, sy: fu.y * T + 6 });
+    else if (fu.kind === "planterbox") {
+      const c4 = [[fu.x + 1, fu.y], [fu.x - 1, fu.y], [fu.x, fu.y + 1], [fu.x, fu.y - 1]];
+      for (const [ex, ey] of c4) if (M.walkable(ex, ey) && M.g(ex, ey) !== M.POOL) CAT_NAPS.push({ x: ex, y: ey, sx: ex * T + 8, sy: ey * T + 8 });
+    }
+  }
+  const CAT_BLOCKED = (x, y) => M.g(x, y) === M.POOL;
+  function drawCat(ctx, c, frame, t) {
+    const x = Math.round(c.px),
+      y = Math.round(c.py);
+    const s = c.faceLR === "left" ? -1 : 1;
+    const f = (ox2, oy2, w, h, col) => {
+      ctx.fillStyle = col;
+      ctx.fillRect(s > 0 ? x + ox2 : x - ox2 - w, y + oy2, w, h);
+    };
+    ctx.fillStyle = "rgba(38,28,14,0.16)";
+    ctx.fillRect(x - SH_HW1 - 1, y + 4, SH_HW1 * 2 + 2, 2);
+    const f2 = frame >> 1 & 1;
+    if (c.state === "sleep") {
+      const br = f2;
+      f(-4, -2 - br, 8, 1, CAT_O);
+      f(-5, -1 - br, 10, 3 + br, CAT_O);
+      f(-4, -1 - br, 8, 2 + br, CAT_C);
+      f(-3, -1 - br, 5, 1, CAT_L);
+      f(-4, 1, 8, 1, CAT_D);
+      f(2, 0, 2, 1, CAT_D);
+      f(-3, 0, 1, 1, CAT_W);
+      return;
+    }
+    if (c.state === "sit") {
+      const tf = f2;
+      f(-2, -6, 1, 1, CAT_O);
+      f(1, -6, 1, 1, CAT_O);
+      f(-2, -5, 4, 3, CAT_O);
+      f(-1, -4, 2, 1, CAT_C);
+      f(-1, -5, 2, 1, CAT_L);
+      f(0, -4, 1, 1, CAT_EYE);
+      f(-3, -2, 6, 6, CAT_O);
+      f(-2, -1, 4, 4, CAT_C);
+      f(-2, -1, 4, 1, CAT_L);
+      f(-1, 1, 2, 2, CAT_W);
+      f(-2, 3, 4, 1, CAT_D);
+      f(3, 1 - tf, 2, 1, CAT_O);
+      f(3 + tf, 2 - tf, 1, 2, CAT_O);
+      return;
+    }
+    const lp = c.path.length ? f2 : 0;
+    f(-6, -3, 1, 1, CAT_O);
+    f(-5 - lp, -2, 2, 1, CAT_D);
+    f(-4, -4, 8, 1, CAT_O);
+    f(-5, -3, 10, 3, CAT_O);
+    f(-4, -3, 8, 2, CAT_C);
+    f(-3, -3, 6, 1, CAT_L);
+    f(-4, -1, 8, 1, CAT_D);
+    f(2, -6, 1, 1, CAT_O);
+    f(4, -6, 1, 1, CAT_O);
+    f(1, -5, 5, 3, CAT_O);
+    f(2, -4, 3, 2, CAT_C);
+    f(2, -5, 3, 1, CAT_L);
+    f(4, -4, 1, 1, CAT_EYE);
+    f(2, -2, 1, 1, CAT_W);
+    f(-4 + lp, 0, 1, 4, CAT_O);
+    f(-1, 0, 1, 4 - lp, CAT_O);
+    f(1, 0, 1, 4 - (1 - lp), CAT_O);
+    f(3 - lp, 0, 1, 4, CAT_O);
+  }
   let _audioCtx = null;
   const ensureAudio = () => {
     try {
@@ -170,8 +278,8 @@ const ASWorld = (() => {
     return [Math.round(a[0] + (b[0] - a[0]) * k), Math.round(a[1] + (b[1] - a[1]) * k), Math.round(a[2] + (b[2] - a[2]) * k)];
   }
   function dayTint(m) {
-    const night = [20, 30, 62],
-      dusk = [240, 140, 70];
+    const night = [16, 22, 58],
+      dusk = [242, 148, 64];
     let c, a;
     if (m < 300) {
       c = night;
@@ -320,7 +428,7 @@ const ASWorld = (() => {
       ctx2.fillRect(X, Y, w, h);
     };
     const shw = mv ? Math.round(Math.abs(sw) * 2) - 1 : 0;
-    ctx.fillStyle = "rgba(40,60,45,0.22)";
+    ctx.fillStyle = "rgba(30,44,72,0.26)";
     ctx.fillRect(x - 4 - shw, y + 5, 10 + shw * 2, 3);
     if (a.def.lead) {
       ctx.strokeStyle = "rgba(30,215,96,0.5)";
@@ -333,9 +441,10 @@ const ASWorld = (() => {
     let oy = -bob;
     if (gOn && tg.kind === "hifive" && (t * 6 | 0) % 2) oy -= 1;
     const bre = mv ? 0 : Math.sin(t * 2.42 + a._h) > 0.35 ? 1 : 0;
-    const oP = shadeHex("#4A4440", -55);
-    const oS = shadeHex(p.shirt, -55);
-    const oH = shadeHex(p.hair, -55);
+    const tn = a._tn || (a._tn = { s: g5tones(p.shirt), h: g5tones(p.hair), k: g5tones(p.skin) });
+    const oP = PANTS.o;
+    const oS = tn.s.o;
+    const oH = tn.h.o;
     const lStride = gait;
     const rStride = -gait;
     const lLift = Math.max(0, -lStride);
@@ -348,8 +457,8 @@ const ASWorld = (() => {
     const rFootY = y + 5 + oy + (rReach > 1 ? 1 : 0) - rLift;
     const lLegH = Math.max(3, lFootY - lLegY + 1);
     const rLegH = Math.max(3, rFootY - rLegY + 1);
-    fx(ctx, x - 4, lLegY, 3, lLegH, "#4A4440");
-    fx(ctx, x + 1, rLegY, 3, rLegH, "#4A4440");
+    fx(ctx, x - 4, lLegY, 3, lLegH, PANTS.b);
+    fx(ctx, x + 1, rLegY, 3, rLegH, PANTS.b);
     fx(ctx, x - 5, lLegY, 1, lLegH, oP);
     fx(ctx, x + 4, rLegY, 1, rLegH, oP);
     fx(ctx, x - 4 - (lReach > 0 ? 1 : 0), lFootY, 3 + (lReach > 0 ? 1 : 0), 1, oP);
@@ -362,28 +471,35 @@ const ASWorld = (() => {
       const lArmY = y - 5 + oy - armSwing;
       const rArmY = y - 5 + oy + armSwing;
       fx(ctx, lArmX, lArmY, 1, 6, oS);
-      fx(ctx, lArmX + 1, lArmY + 1, 1, 5, p.skin);
+      fx(ctx, lArmX + 1, lArmY + 1, 1, 5, tn.k.b);
       fx(ctx, rArmX + 1, rArmY, 1, 6, oS);
-      fx(ctx, rArmX, rArmY + 1, 1, 5, p.skin);
+      fx(ctx, rArmX, rArmY + 1, 1, 5, tn.k.b);
     } else {
       fx(ctx, x - 6, y - 5 + oy, 1, 7, oS);
       fx(ctx, x + 5, y - 5 + oy, 1, 7, oS);
     }
-    fx(ctx, x - 5, y - 5 + oy, 10, 7, p.shirt);
-    fx(ctx, x - 5, y - 5 - bre + oy, 10, 2, shadeHex(p.shirt, 22));
-    fx(ctx, x + 4, y - 3 + oy, 1, 4, shadeHex(p.shirt, -22));
-    fx(ctx, x - 4, y + 1 + oy, 8, 1, shadeHex(p.shirt, -22));
+    fx(ctx, x - 5, y - 5 + oy, 10, 7, tn.s.b);
+    fx(ctx, x - 5, y - 5 - bre + oy, 10, 2, tn.s.l);
+    fx(ctx, x - 5, y - 5 - bre + oy, 3, 1, tn.s.h);
+    fx(ctx, x + 3, y - 4 + oy, 2, 5, tn.s.d);
+    fx(ctx, x - 4, y + 1 + oy, 8, 1, tn.s.d);
     fx(ctx, x - 5, y - 5 + oy, 1, 1, oS);
     fx(ctx, x + 4, y - 5 + oy, 1, 1, oS);
     const hOy = oy + hb + headSettle;
-    fx(ctx, x - 4 + lean, y - 13 + hOy, 8, 8, p.skin);
-    fx(ctx, x - 4 + lean, y - 14 + hOy, 8, 3, p.hair);
-    fx(ctx, x - 4 + lean, y - 12 + hOy, 2, 3, p.hair);
-    fx(ctx, x + 2 + lean, y - 12 + hOy, 2, 3, p.hair);
-    fx(ctx, x - 3 + lean, y - 14 + hOy, 3, 1, shadeHex(p.hair, 22));
-    fx(ctx, x - 5 + lean, y - 14 + hOy, 1, 9, oH);
-    fx(ctx, x + 4 + lean, y - 14 + hOy, 1, 9, oH);
-    fx(ctx, x - 4 + lean, y - 15 + hOy, 8, 1, oH);
+    fx(ctx, x - 5 + lean, y - 14 + hOy, 10, 9, tn.k.b);
+    fx(ctx, x - 5 + lean, y - 14 + hOy, 10, 3, tn.h.b);
+    fx(ctx, x - 5 + lean, y - 12 + hOy, 2, 3, tn.h.b);
+    fx(ctx, x + 3 + lean, y - 12 + hOy, 2, 3, tn.h.b);
+    fx(ctx, x - 4 + lean, y - 14 + hOy, 4, 1, tn.h.l);
+    fx(ctx, x - 3 + lean, y - 13 + hOy, 2, 1, tn.h.l);
+    fx(ctx, x - 4 + lean, y - 7 + hOy, 8, 1, tn.k.d);
+    fx(ctx, x - 5 + lean, y - 6 + hOy, 2, 1, tn.k.d);
+    fx(ctx, x + 3 + lean, y - 6 + hOy, 2, 1, tn.k.d);
+    fx(ctx, x - 6 + lean, y - 14 + hOy, 1, 9, oH);
+    fx(ctx, x + 5 + lean, y - 14 + hOy, 1, 9, oH);
+    fx(ctx, x - 5 + lean, y - 15 + hOy, 10, 1, oH);
+    fx(ctx, x - 6 + lean, y - 15 + hOy, 1, 1, tn.h.d);
+    fx(ctx, x + 5 + lean, y - 15 + hOy, 1, 1, tn.h.d);
     drawFace(ctx, a, x + lean, y, hOy, frame, t);
     drawProp(ctx, a, x + lean, y, hOy);
     if (a.petalUntil && t < a.petalUntil) fx(ctx, x + lean, y - 16 + hOy, 1, 1, PETAL_A);
@@ -397,29 +513,29 @@ const ASWorld = (() => {
     }
     if (gOn && tg.kind === "wave") {
       const wv = (t * 8 | 0) % 2;
-      fx(ctx, x + 5, y - 9 + oy - wv, 2, 5, p.skin);
-      fx(ctx, x + 6, y - 11 + oy - wv, 1, 2, p.skin);
+      fx(ctx, x + 5, y - 9 + oy - wv, 2, 5, tn.k.b);
+      fx(ctx, x + 6, y - 11 + oy - wv, 1, 2, tn.k.b);
     } else if (gOn && tg.kind === "hifive") {
-      fx(ctx, x - 6, y - 12 + oy, 2, 6, p.skin);
-      fx(ctx, x + 4, y - 12 + oy, 2, 6, p.skin);
+      fx(ctx, x - 6, y - 12 + oy, 2, 6, tn.k.b);
+      fx(ctx, x + 4, y - 12 + oy, 2, 6, tn.k.b);
     }
     if (a.state === "working" && (frame >> 1) % 2) fx(ctx, x + 6, y - 15 + oy, 2, 2, "#1ED760");
     if (a.state === "social" && !a.moving) {
       const tnow = performance.now() / 1000;
       if (a.relaxKind === "court") {
         if (a.shootUntil && tnow < a.shootUntil) {
-          fx(ctx, x - 6, y - 13 + oy, 2, 7, p.skin);
-          fx(ctx, x + 4, y - 13 + oy, 2, 7, p.skin);
+          fx(ctx, x - 6, y - 13 + oy, 2, 7, tn.k.b);
+          fx(ctx, x + 4, y - 13 + oy, 2, 7, tn.k.b);
           fx(ctx, x - 3, y - 19 + oy, 6, 6, shadeHex("#E8853C", -55));
           fx(ctx, x - 2, y - 18 + oy, 4, 4, "#E8853C");
           fx(ctx, x - 2, y - 16 + oy, 4, 1, "#B95F22");
           fx(ctx, x - 2, y - 18 + oy, 1, 1, "#FFD9B8");
         } else if (a.recvUntil && tnow < a.recvUntil) {
-          fx(ctx, x - 7, y - 10 + oy, 2, 5, p.skin);
-          fx(ctx, x + 5, y - 10 + oy, 2, 5, p.skin);
+          fx(ctx, x - 7, y - 10 + oy, 2, 5, tn.k.b);
+          fx(ctx, x + 5, y - 10 + oy, 2, 5, tn.k.b);
         } else if (a.hasBall) {
           const bb = frame % 2 ? 5 : 0;
-          fx(ctx, x + 6, y - 6 + oy, 2, 4, p.skin);
+          fx(ctx, x + 6, y - 6 + oy, 2, 4, tn.k.b);
           fx(ctx, x + 4, y - 2 + bb, 6, 6, shadeHex("#E8853C", -55));
           fx(ctx, x + 5, y - 1 + bb, 4, 4, "#E8853C");
           fx(ctx, x + 5, y + 1 + bb, 4, 1, "#B95F22");
@@ -428,15 +544,15 @@ const ASWorld = (() => {
       } else if (a.relaxKind === "game") {
         if (a.gameUntil && tnow < a.gameUntil) {
           const jit = (tnow * 8 | 0) % 2;
-          fx(ctx, x - 6, y - 4 + oy + jit, 2, 2, p.skin);
-          fx(ctx, x + 4, y - 3 + oy - jit, 2, 2, p.skin);
+          fx(ctx, x - 6, y - 4 + oy + jit, 2, 2, tn.k.b);
+          fx(ctx, x + 4, y - 3 + oy - jit, 2, 2, tn.k.b);
         } else if (a.gameResUntil && tnow < a.gameResUntil && a.gameWin) {
-          fx(ctx, x - 6, y - 12 + oy, 2, 7, p.skin);
-          fx(ctx, x + 4, y - 12 + oy, 2, 7, p.skin);
+          fx(ctx, x - 6, y - 12 + oy, 2, 7, tn.k.b);
+          fx(ctx, x + 4, y - 12 + oy, 2, 7, tn.k.b);
         }
       } else if (a.snackStage === 5) {
         const hf = (tnow * 3 | 0) % 2;
-        fx(ctx, x + 4, y - (hf ? 9 : 5) + oy, 2, 2, p.skin);
+        fx(ctx, x + 4, y - (hf ? 9 : 5) + oy, 2, 2, tn.k.b);
         if ((tnow * 2 | 0) % 3 < 1) {
           fx(ctx, x - 1, y + 6, 1, 1, "#C9A04E");
           fx(ctx, x + 2, y + 7, 1, 1, "#E0A458");
@@ -452,23 +568,24 @@ const ASWorld = (() => {
       ctx.fillStyle = c;
       ctx.fillRect(X, Y, w, h);
     };
-    const oP = shadeHex("#4A4440", -55);
-    const oS = shadeHex(p.shirt, -55);
-    const oH = shadeHex(p.hair, -55);
+    const tn = a._tn || (a._tn = { s: g5tones(p.shirt), h: g5tones(p.hair), k: g5tones(p.skin) });
+    const oP = PANTS.o;
+    const oS = tn.s.o;
+    const oH = tn.h.o;
     fx(x - 11, y + 4, 24, 3, "rgba(40,60,45,0.22)");
-    fx(x + 6, y - 1, 5, 2, "#4A4440");
-    fx(x + 6, y + 2, 5, 2, "#4A4440");
+    fx(x + 6, y - 1, 5, 2, PANTS.b);
+    fx(x + 6, y + 2, 5, 2, PANTS.b);
     fx(x + 11, y - 1, 1, 2, oP);
     fx(x + 11, y + 2, 1, 2, oP);
     fx(x - 4, y - 3, 10, 1, oS);
     fx(x - 4, y + 4, 10, 1, oS);
-    fx(x - 4, y - 2, 10, 6, p.shirt);
-    fx(x - 4, y - 2, 2, 6, shadeHex(p.shirt, 22));
-    fx(x - 1, y - 4, 4, 2, shadeHex(p.shirt, -22));
-    fx(x - 12, y - 3, 8, 8, p.skin);
-    fx(x - 13, y - 3, 2, 8, p.hair);
-    fx(x - 12, y - 3, 8, 2, p.hair);
-    fx(x - 13, y - 2, 1, 3, shadeHex(p.hair, 22));
+    fx(x - 4, y - 2, 10, 6, tn.s.b);
+    fx(x - 4, y - 2, 2, 6, tn.s.l);
+    fx(x - 1, y - 4, 4, 2, tn.s.d);
+    fx(x - 12, y - 3, 8, 8, tn.k.b);
+    fx(x - 13, y - 3, 2, 8, tn.h.b);
+    fx(x - 12, y - 3, 8, 2, tn.h.b);
+    fx(x - 13, y - 2, 1, 3, tn.h.l);
     fx(x - 14, y - 3, 1, 8, oH);
     fx(x - 13, y - 4, 9, 1, oH);
     fx(x - 13, y + 5, 9, 1, oH);
@@ -509,23 +626,24 @@ const ASWorld = (() => {
     const x = Math.round(a.px),
       y = Math.round(a.py);
     const p = a.def.palette;
+    const tn = a._tn || (a._tn = { s: g5tones(p.shirt), h: g5tones(p.hair), k: g5tones(p.skin) });
     const fx = (X, Y, w, h, c) => {
       ctx.fillStyle = c;
       ctx.fillRect(X, Y, w, h);
     };
     const bob = Math.sin(t * 2.4 + a._h) > 0 ? 1 : 0;
-    const oS = shadeHex(p.shirt, -55);
-    const oH = shadeHex(p.hair, -55);
+    const oS = tn.s.o;
+    const oH = tn.h.o;
     fx(x - 8, y + 1, 16, 2, "rgba(255,255,255,0.3)");
     fx(x - 6, y - 4 + bob, 1, 3, oS);
     fx(x + 5, y - 4 + bob, 1, 3, oS);
-    fx(x - 5, y - 4 + bob, 10, 3, p.shirt);
-    fx(x - 5, y - 4 + bob, 10, 1, shadeHex(p.shirt, 22));
-    fx(x - 4, y - 12 + bob, 8, 8, p.skin);
-    fx(x - 4, y - 13 + bob, 8, 3, p.hair);
-    fx(x - 4, y - 11 + bob, 2, 3, p.hair);
-    fx(x + 2, y - 11 + bob, 2, 3, p.hair);
-    fx(x - 3, y - 13 + bob, 3, 1, shadeHex(p.hair, 22));
+    fx(x - 5, y - 4 + bob, 10, 3, tn.s.b);
+    fx(x - 5, y - 4 + bob, 10, 1, tn.s.l);
+    fx(x - 4, y - 12 + bob, 8, 8, tn.k.b);
+    fx(x - 4, y - 13 + bob, 8, 3, tn.h.b);
+    fx(x - 4, y - 11 + bob, 2, 3, tn.h.b);
+    fx(x + 2, y - 11 + bob, 2, 3, tn.h.b);
+    fx(x - 3, y - 13 + bob, 3, 1, tn.h.l);
     fx(x - 5, y - 13 + bob, 1, 8, oH);
     fx(x + 4, y - 13 + bob, 1, 8, oH);
     fx(x - 4, y - 14 + bob, 8, 1, oH);
@@ -533,15 +651,15 @@ const ASWorld = (() => {
     fx(x + 1, y - 9 + bob, 1, 2, "#2A2622");
     const ph = Math.floor(t * 4 + a._h) % 4;
     if (ph === 0) {
-      fx(x - 9, y - 9, 3, 3, p.skin);
+      fx(x - 9, y - 9, 3, 3, tn.k.b);
       fx(x - 12, y - 10, 3, 2, "#EAF8FD");
     } else if (ph === 1) {
-      fx(x - 7, y - 6, 3, 3, p.skin);
+      fx(x - 7, y - 6, 3, 3, tn.k.b);
     } else if (ph === 2) {
-      fx(x + 6, y - 9, 3, 3, p.skin);
+      fx(x + 6, y - 9, 3, 3, tn.k.b);
       fx(x + 9, y - 10, 3, 2, "#EAF8FD");
     } else {
-      fx(x + 4, y - 6, 3, 3, p.skin);
+      fx(x + 4, y - 6, 3, 3, tn.k.b);
     }
     fx(x - 6, y - 2 + bob, 12, 3, "rgba(143,220,242,0.65)");
     const kf = frame % 2;
@@ -561,28 +679,29 @@ const ASWorld = (() => {
     };
     const ph = (frame >> 1) % 2;
     const fast = frame % 2;
-    const oP = shadeHex("#4A4440", -55);
-    const oS = shadeHex(p.shirt, -55);
-    const oH = shadeHex(p.hair, -55);
+    const tn = a._tn || (a._tn = { s: g5tones(p.shirt), h: g5tones(p.hair), k: g5tones(p.skin) });
+    const oP = PANTS.o;
+    const oS = tn.s.o;
+    const oH = tn.h.o;
     ctx.fillStyle = "rgba(40,60,45,0.22)";
     switch (a.exercise) {
       case "pullup":
         {
           const lift = PULL_SEQ[Math.floor(t * 2.4 + a._h) % 4];
           ctx.fillRect(x - 4, y + 5, 10, 3);
-          fx(x - 5, y - 14 + lift, 2, 7, p.skin);
-          fx(x + 3, y - 14 + lift, 2, 7, p.skin);
+          fx(x - 5, y - 14 + lift, 2, 7, tn.k.b);
+          fx(x + 3, y - 14 + lift, 2, 7, tn.k.b);
           fx(x - 6, y - 5 + lift, 1, 7, oS);
           fx(x + 5, y - 5 + lift, 1, 7, oS);
-          fx(x - 5, y - 5 + lift, 10, 7, p.shirt);
-          fx(x - 5, y - 5 + lift, 10, 2, shadeHex(p.shirt, 22));
-          fx(x - 4, y + 1 + lift, 8, 1, shadeHex(p.shirt, -22));
-          fx(x - 4, y - 13 + lift, 8, 8, p.skin);
-          fx(x - 4, y - 14 + lift, 8, 3, p.hair);
-          fx(x - 3, y - 14 + lift, 3, 1, shadeHex(p.hair, 22));
+          fx(x - 5, y - 5 + lift, 10, 7, tn.s.b);
+          fx(x - 5, y - 5 + lift, 10, 2, tn.s.l);
+          fx(x - 4, y + 1 + lift, 8, 1, tn.s.d);
+          fx(x - 4, y - 13 + lift, 8, 8, tn.k.b);
+          fx(x - 4, y - 14 + lift, 8, 3, tn.h.b);
+          fx(x - 3, y - 14 + lift, 3, 1, tn.h.l);
           fx(x - 4, y - 15 + lift, 8, 1, oH);
-          fx(x - 4, y + 2 + lift, 3, 3, "#4A4440");
-          fx(x + 1, y + 2 + lift, 3, 3, "#4A4440");
+          fx(x - 4, y + 2 + lift, 3, 3, PANTS.b);
+          fx(x + 1, y + 2 + lift, 3, 3, PANTS.b);
           fx(x - 4, y + 4 + lift, 3, 1, oP);
           fx(x + 1, y + 4 + lift, 3, 1, oP);
           break;
@@ -591,16 +710,16 @@ const ASWorld = (() => {
         {
           const press = BENCH_SEQ[Math.floor(t * 3 + a._h) % 5];
           ctx.fillRect(x - 9, y + 4, 20, 3);
-          fx(x - 7, y - 2, 12, 5, p.shirt);
-          fx(x - 7, y - 2, 12, 1, shadeHex(p.shirt, 22));
-          fx(x - 7, y + 2, 12, 1, shadeHex(p.shirt, -22));
-          fx(x + 5, y - 3, 6, 6, p.skin);
-          fx(x + 9, y - 4, 3, 7, p.hair);
-          fx(x + 9, y - 4, 1, 2, shadeHex(p.hair, 22));
+          fx(x - 7, y - 2, 12, 5, tn.s.b);
+          fx(x - 7, y - 2, 12, 1, tn.s.l);
+          fx(x - 7, y + 2, 12, 1, tn.s.d);
+          fx(x + 5, y - 3, 6, 6, tn.k.b);
+          fx(x + 9, y - 4, 3, 7, tn.h.b);
+          fx(x + 9, y - 4, 1, 2, tn.h.l);
           fx(x + 12, y - 4, 1, 7, oH);
           fx(x + 9, y - 5, 3, 1, oH);
-          fx(x - 4, y - 6 + press, 2, 5, p.skin);
-          fx(x + 1, y - 6 + press, 2, 5, p.skin);
+          fx(x - 4, y - 6 + press, 2, 5, tn.k.b);
+          fx(x + 1, y - 6 + press, 2, 5, tn.k.b);
           fx(x - 8, y - 7 + press, 16, 2, "#8B8F96");
           fx(x - 8, y - 7 + press, 16, 1, shadeHex("#8B8F96", 26));
           fx(x - 6, y - 7 + press, 1, 1, "#F4F7FA");
@@ -614,16 +733,16 @@ const ASWorld = (() => {
         {
           const dip = fast ? 2 : 0;
           ctx.fillRect(x - 8, y + 5, 18, 3);
-          fx(x - 8, y + dip, 12, 4, p.shirt);
-          fx(x - 8, y + dip, 12, 1, shadeHex(p.shirt, 22));
-          fx(x - 8, y + 3 + dip, 12, 1, shadeHex(p.shirt, -22));
-          fx(x + 3, y - 3 + dip, 6, 6, p.skin);
-          fx(x + 4, y - 4 + dip, 6, 2, p.hair);
-          fx(x + 4, y - 4 + dip, 2, 1, shadeHex(p.hair, 22));
+          fx(x - 8, y + dip, 12, 4, tn.s.b);
+          fx(x - 8, y + dip, 12, 1, tn.s.l);
+          fx(x - 8, y + 3 + dip, 12, 1, tn.s.d);
+          fx(x + 3, y - 3 + dip, 6, 6, tn.k.b);
+          fx(x + 4, y - 4 + dip, 6, 2, tn.h.b);
+          fx(x + 4, y - 4 + dip, 2, 1, tn.h.l);
           fx(x + 4, y - 5 + dip, 6, 1, oH);
-          fx(x - 7, y + 3, 2, 4, p.skin);
-          fx(x + 1, y + 3, 2, 4, p.skin);
-          fx(x - 8, y + 4 + dip, 4, 2, "#4A4440");
+          fx(x - 7, y + 3, 2, 4, tn.k.b);
+          fx(x + 1, y + 3, 2, 4, tn.k.b);
+          fx(x - 8, y + 4 + dip, 4, 2, PANTS.b);
           fx(x - 8, y + 5 + dip, 4, 1, oP);
           break;
         }
@@ -634,13 +753,13 @@ const ASWorld = (() => {
           const oy = -rf;
           ctx.fillRect(x - 4, y + 5, 10, 3);
           if (rf) {
-            fx(x - 4, y + 1 + oy, 3, 5, "#4A4440");
-            fx(x + 1, y + 2 + oy, 3, 4, "#4A4440");
+            fx(x - 4, y + 1 + oy, 3, 5, PANTS.b);
+            fx(x + 1, y + 2 + oy, 3, 4, PANTS.b);
             fx(x - 5, y + 1 + oy, 1, 5, oP);
             fx(x + 4, y + 2 + oy, 1, 4, oP);
           } else {
-            fx(x - 4, y + 2 + oy, 3, 4, "#4A4440");
-            fx(x + 1, y + 1 + oy, 3, 5, "#4A4440");
+            fx(x - 4, y + 2 + oy, 3, 4, PANTS.b);
+            fx(x + 1, y + 1 + oy, 3, 5, PANTS.b);
             fx(x - 5, y + 2 + oy, 1, 4, oP);
             fx(x + 4, y + 1 + oy, 1, 5, oP);
           }
@@ -648,15 +767,15 @@ const ASWorld = (() => {
           fx(x + 1, y + 5 + oy, 3, 1, oP);
           fx(x - 6 + ln, y - 5 + oy, 1, 7, oS);
           fx(x + 5 + ln, y - 5 + oy, 1, 7, oS);
-          fx(x - 5 + ln, y - 5 + oy, 10, 7, p.shirt);
-          fx(x - 5 + ln, y - 5 + oy, 10, 2, shadeHex(p.shirt, 22));
-          fx(x + 4 + ln, y - 3 + oy, 1, 4, shadeHex(p.shirt, -22));
-          fx(x - 4 + ln, y + 1 + oy, 8, 1, shadeHex(p.shirt, -22));
-          fx(x - 4 + ln, y - 13 + oy, 8, 8, p.skin);
-          fx(x - 4 + ln, y - 14 + oy, 8, 3, p.hair);
-          fx(x - 4 + ln, y - 12 + oy, 2, 3, p.hair);
-          fx(x + 2 + ln, y - 12 + oy, 2, 3, p.hair);
-          fx(x - 3 + ln, y - 14 + oy, 3, 1, shadeHex(p.hair, 22));
+          fx(x - 5 + ln, y - 5 + oy, 10, 7, tn.s.b);
+          fx(x - 5 + ln, y - 5 + oy, 10, 2, tn.s.l);
+          fx(x + 4 + ln, y - 3 + oy, 1, 4, tn.s.d);
+          fx(x - 4 + ln, y + 1 + oy, 8, 1, tn.s.d);
+          fx(x - 4 + ln, y - 13 + oy, 8, 8, tn.k.b);
+          fx(x - 4 + ln, y - 14 + oy, 8, 3, tn.h.b);
+          fx(x - 4 + ln, y - 12 + oy, 2, 3, tn.h.b);
+          fx(x + 2 + ln, y - 12 + oy, 2, 3, tn.h.b);
+          fx(x - 3 + ln, y - 14 + oy, 3, 1, tn.h.l);
           fx(x - 5 + ln, y - 14 + oy, 1, 9, oH);
           fx(x + 4 + ln, y - 14 + oy, 1, 9, oH);
           fx(x - 4 + ln, y - 15 + oy, 8, 1, oH);
@@ -669,25 +788,25 @@ const ASWorld = (() => {
           const lo = DB_SEQ[di];
           const ro = DB_SEQ[(di + 2) % 4];
           ctx.fillRect(x - 4, y + 5, 10, 3);
-          fx(x - 4, y + 1, 3, 5, "#4A4440");
-          fx(x + 1, y + 1, 3, 5, "#4A4440");
+          fx(x - 4, y + 1, 3, 5, PANTS.b);
+          fx(x + 1, y + 1, 3, 5, PANTS.b);
           fx(x - 5, y + 1, 1, 5, oP);
           fx(x + 4, y + 1, 1, 5, oP);
           fx(x - 4, y + 5, 3, 1, oP);
           fx(x + 1, y + 5, 3, 1, oP);
           fx(x - 6, y - 5, 1, 7, oS);
           fx(x + 5, y - 5, 1, 7, oS);
-          fx(x - 5, y - 5, 10, 7, p.shirt);
-          fx(x - 5, y - 5, 10, 2, shadeHex(p.shirt, 22));
-          fx(x - 4, y + 1, 8, 1, shadeHex(p.shirt, -22));
-          fx(x - 4, y - 13, 8, 8, p.skin);
-          fx(x - 4, y - 14, 8, 3, p.hair);
-          fx(x - 3, y - 14, 3, 1, shadeHex(p.hair, 22));
+          fx(x - 5, y - 5, 10, 7, tn.s.b);
+          fx(x - 5, y - 5, 10, 2, tn.s.l);
+          fx(x - 4, y + 1, 8, 1, tn.s.d);
+          fx(x - 4, y - 13, 8, 8, tn.k.b);
+          fx(x - 4, y - 14, 8, 3, tn.h.b);
+          fx(x - 3, y - 14, 3, 1, tn.h.l);
           fx(x - 5, y - 14, 1, 9, oH);
           fx(x + 4, y - 14, 1, 9, oH);
           fx(x - 4, y - 15, 8, 1, oH);
-          fx(x - 7, y - 4 + lo, 2, 4, p.skin);
-          fx(x + 5, y - 4 + ro, 2, 4, p.skin);
+          fx(x - 7, y - 4 + lo, 2, 4, tn.k.b);
+          fx(x + 5, y - 4 + ro, 2, 4, tn.k.b);
           fx(x - 9, y - 5 + lo, 4, 3, "#2E3440");
           fx(x + 5, y - 5 + ro, 4, 3, "#2E3440");
           fx(x - 9, y - 5 + lo, 4, 1, shadeHex("#2E3440", 28));
@@ -711,6 +830,7 @@ const ASWorld = (() => {
     const tg = a.gesture;
     const hb = tg && tg.kind === "nod" && t >= (tg.t0 || 0) && t < tg.until ? (t * 5 | 0) % 2 : 0;
     const p = a.def.palette;
+    const tn = a._tn || (a._tn = { s: g5tones(p.shirt), h: g5tones(p.hair), k: g5tones(p.skin) });
     const fx = (X, Y, w, h, c) => {
       ctx.fillStyle = c;
       ctx.fillRect(X, Y, w, h);
@@ -723,23 +843,23 @@ const ASWorld = (() => {
       ctx.ellipse(x, y + 6, 9, 3, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
-    const oS = shadeHex(p.shirt, -55);
-    const oH = shadeHex(p.hair, -55);
+    const oS = tn.s.o;
+    const oH = tn.h.o;
     fx(x - 5, y - 1, 10, 4, "#6B6B6B");
     fx(x - 5, y + 2, 10, 1, shadeHex("#6B6B6B", -45));
     fx(x - 6, y - 4, 1, 6, oS);
     fx(x + 5, y - 4, 1, 6, oS);
-    fx(x - 5, y - 4, 10, 6, p.shirt);
-    fx(x - 5, y - 4, 10, 2, shadeHex(p.shirt, 22));
-    fx(x + 4, y - 2, 1, 3, shadeHex(p.shirt, -22));
-    fx(x - 4, y + 1, 8, 1, shadeHex(p.shirt, -22));
+    fx(x - 5, y - 4, 10, 6, tn.s.b);
+    fx(x - 5, y - 4, 10, 2, tn.s.l);
+    fx(x + 4, y - 2, 1, 3, tn.s.d);
+    fx(x - 4, y + 1, 8, 1, tn.s.d);
     fx(x - 5, y - 4, 1, 1, oS);
     fx(x + 4, y - 4, 1, 1, oS);
-    fx(x - 4 + ho, y - 12 + hb, 8, 8, p.skin);
-    fx(x - 4 + ho, y - 13 + hb, 8, 3, p.hair);
-    fx(x - 4 + ho, y - 11 + hb, 2, 3, p.hair);
-    fx(x + 2 + ho, y - 11 + hb, 2, 3, p.hair);
-    fx(x - 3 + ho, y - 13 + hb, 3, 1, shadeHex(p.hair, 22));
+    fx(x - 4 + ho, y - 12 + hb, 8, 8, tn.k.b);
+    fx(x - 4 + ho, y - 13 + hb, 8, 3, tn.h.b);
+    fx(x - 4 + ho, y - 11 + hb, 2, 3, tn.h.b);
+    fx(x + 2 + ho, y - 11 + hb, 2, 3, tn.h.b);
+    fx(x - 3 + ho, y - 13 + hb, 3, 1, tn.h.l);
     fx(x - 5 + ho, y - 13 + hb, 1, 9, oH);
     fx(x + 4 + ho, y - 13 + hb, 1, 9, oH);
     fx(x - 4 + ho, y - 14 + hb, 8, 1, oH);
@@ -747,8 +867,8 @@ const ASWorld = (() => {
     drawProp(ctx, a, x + ho, y, 1);
     const tb = paused ? 0 : Math.floor(t * 7 + a._h) % 2;
     const rb = paused ? 0 : 1 - tb;
-    fx(x - 4, y + 1 - tb, 2, 2, p.skin);
-    fx(x + 2, y + 1 - rb, 2, 2, p.skin);
+    fx(x - 4, y + 1 - tb, 2, 2, tn.k.b);
+    fx(x + 2, y + 1 - rb, 2, 2, tn.k.b);
     fx(x - 4, y + 3, 8, 2, "#3A3531");
     fx(x - 4, y + 4, 8, 1, shadeHex("#3A3531", -35));
     fx(x - 3, y + 1, 6, 2, "#23303A");
@@ -758,7 +878,7 @@ const ASWorld = (() => {
       if ((t + a._h) % 12 < 0.6) {
         fx(x + 3 + ho, y - 8 + hb, 2, 2, CUP_CREAM);
         fx(x + 3 + ho, y - 7 + hb, 2, 1, CUP_BAND);
-        fx(x + 4 + ho, y - 6 + hb, 1, 2, p.skin);
+        fx(x + 4 + ho, y - 6 + hb, 1, 2, tn.k.b);
       } else {
         fx(x + 5, y - 2, 2, 2, CUP_CREAM);
         fx(x + 5, y - 1, 2, 1, CUP_BAND);
@@ -776,27 +896,28 @@ const ASWorld = (() => {
     const tg = a.gesture;
     const hb = tg && tg.kind === "nod" && t >= (tg.t0 || 0) && t < tg.until ? (t * 5 | 0) % 2 : 0;
     const bre = Math.sin(t * 2.42 + a._h) > 0.35 ? 1 : 0;
-    const oP = shadeHex("#4A4440", -55);
-    const oS = shadeHex(p.shirt, -55);
-    const oH = shadeHex(p.hair, -55);
+    const tn = a._tn || (a._tn = { s: g5tones(p.shirt), h: g5tones(p.hair), k: g5tones(p.skin) });
+    const oP = PANTS.o;
+    const oS = tn.s.o;
+    const oH = tn.h.o;
     fx(x - 6, y - 4, 1, 6, oS);
     fx(x + 5, y - 4, 1, 6, oS);
-    fx(x - 5, y - 4, 10, 6, p.shirt);
-    fx(x - 5, y - 4 - bre, 10, 2, shadeHex(p.shirt, 22));
-    fx(x + 4, y - 2, 1, 3, shadeHex(p.shirt, -22));
-    fx(x - 4, y + 1, 8, 1, shadeHex(p.shirt, -22));
-    fx(x - 4, y - 12 + hb, 8, 8, p.skin);
-    fx(x - 4, y - 13 + hb, 8, 3, p.hair);
-    fx(x - 4, y - 11 + hb, 2, 3, p.hair);
-    fx(x + 2, y - 11 + hb, 2, 3, p.hair);
-    fx(x - 3, y - 13 + hb, 3, 1, shadeHex(p.hair, 22));
+    fx(x - 5, y - 4, 10, 6, tn.s.b);
+    fx(x - 5, y - 4 - bre, 10, 2, tn.s.l);
+    fx(x + 4, y - 2, 1, 3, tn.s.d);
+    fx(x - 4, y + 1, 8, 1, tn.s.d);
+    fx(x - 4, y - 12 + hb, 8, 8, tn.k.b);
+    fx(x - 4, y - 13 + hb, 8, 3, tn.h.b);
+    fx(x - 4, y - 11 + hb, 2, 3, tn.h.b);
+    fx(x + 2, y - 11 + hb, 2, 3, tn.h.b);
+    fx(x - 3, y - 13 + hb, 3, 1, tn.h.l);
     fx(x - 5, y - 13 + hb, 1, 9, oH);
     fx(x + 4, y - 13 + hb, 1, 9, oH);
     fx(x - 4, y - 14 + hb, 8, 1, oH);
     drawFace(ctx, a, x, y, 1 + hb, frame, t);
     drawProp(ctx, a, x, y, 1);
-    fx(x - 4, y + 2, 3, 2, "#4A4440");
-    fx(x + 1, y + 2, 3, 2, "#4A4440");
+    fx(x - 4, y + 2, 3, 2, PANTS.b);
+    fx(x + 1, y + 2, 3, 2, PANTS.b);
     fx(x - 4, y + 4, 3, 1, oP);
     fx(x + 1, y + 4, 3, 1, oP);
     if (a.petalUntil && t < a.petalUntil) fx(x, y - 15 + hb, 1, 1, PETAL_A);
@@ -809,21 +930,22 @@ const ASWorld = (() => {
     const x = Math.round(a.px),
       y = Math.round(a.py);
     const p = a.def.palette;
+    const tn = a._tn || (a._tn = { s: g5tones(p.shirt), h: g5tones(p.hair), k: g5tones(p.skin) });
     const fx = (X, Y, w, h, c) => {
       ctx.fillStyle = c;
       ctx.fillRect(X, Y, w, h);
     };
-    const oS = shadeHex(p.shirt, -55);
-    const oH = shadeHex(p.hair, -55);
-    fx(x + 6, y - 1, 5, 2, "#4A4440");
-    fx(x + 6, y + 2, 5, 2, "#4A4440");
+    const oS = tn.s.o;
+    const oH = tn.h.o;
+    fx(x + 6, y - 1, 5, 2, PANTS.b);
+    fx(x + 6, y + 2, 5, 2, PANTS.b);
     fx(x - 4, y - 3, 10, 1, oS);
     fx(x - 4, y + 4, 10, 1, oS);
-    fx(x - 4, y - 2, 10, 6, p.shirt);
-    fx(x - 4, y - 2, 2, 6, shadeHex(p.shirt, 22));
-    fx(x - 12, y - 3, 8, 8, p.skin);
-    fx(x - 13, y - 3, 2, 8, p.hair);
-    fx(x - 12, y - 3, 8, 2, p.hair);
+    fx(x - 4, y - 2, 10, 6, tn.s.b);
+    fx(x - 4, y - 2, 2, 6, tn.s.l);
+    fx(x - 12, y - 3, 8, 8, tn.k.b);
+    fx(x - 13, y - 3, 2, 8, tn.h.b);
+    fx(x - 12, y - 3, 8, 2, tn.h.b);
     fx(x - 14, y - 3, 1, 8, oH);
     fx(x - 13, y - 4, 9, 1, oH);
     fx(x - 13, y + 5, 9, 1, oH);
@@ -1514,7 +1636,7 @@ const ASWorld = (() => {
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(stampBlocks);else stampBlocks();
     const SPEED = 48;
     const agents = D.AGENTS.map(def => {
-      const [dx, dy] = nearestWalkable(def.desk.x, def.desk.y + 1);
+      const [dx, dy] = nearestSpawn(def.desk.x, def.desk.y + 1);
       return {
         id: def.id,
         def,
@@ -1561,11 +1683,13 @@ const ASWorld = (() => {
         restPending: false,
         restUntil: 0,
         petalUntil: 0,
+        _ry: 0,
+        _nodT: 0,
         deskTile: [dx, dy],
         stats: {
-          tasks: 12 + (M.hash(dx, dy) * 30 | 0),
-          tokens: 180 + (M.hash(dy, dx) * 600 | 0) + "K",
-          uptime: "99.9" + (M.hash(dx * 2, dy) * 9 | 0) + "%"
+          tasks: 0,
+          tokens: 0,
+          uptime: null
         }
       };
     });
@@ -1729,6 +1853,13 @@ const ASWorld = (() => {
       }
     }
     function applyArrival(a) {
+      if (!M.walkable(a.tx, a.ty) && !SOFA_SEATS[a.ty * M.W + a.tx]) {
+        const [wx, wy] = nearestWalkable(a.tx, a.ty);
+        a.tx = wx;
+        a.ty = wy;
+        a.px = wx * T + 8;
+        a.py = wy * T + 8;
+      }
       if (a.pendingRelax) {
         a.relaxKind = a.pendingRelax;
         a.pendingRelax = null;
@@ -1815,7 +1946,7 @@ const ASWorld = (() => {
       }
     }
     function busy(a) {
-      return a.scripted || a.inHuddle || a.inDuo || a.state === "down" || a.state === "reviving";
+      return a.scripted || a.inHuddle || a.inDuo || !!a._ry || a.state === "down" || a.state === "reviving";
     }
     function ambient(a, t) {
       if (busy(a)) return;
@@ -1963,7 +2094,7 @@ const ASWorld = (() => {
       if (!keys.length) return;
       const key = pick(keys),
         c = world[key];
-      const pred = a => !a.scripted && !a.inHuddle && !a.moving && (a.state === "working" || a.state === "idle" || a.state === "social");
+      const pred = a => !a.scripted && !a.inHuddle && !a._ry && !a.moving && (a.state === "working" || a.state === "idle" || a.state === "social");
       const a = nearestAgent(c, pred, 12) || pick(agents.filter(pred));
       if (!a) return;
       let spot = PHOTO_SPOTS[0],
@@ -2574,6 +2705,501 @@ const ASWorld = (() => {
       }
       if (head > W.list.length * W.passes) world._wave = null;
     }
+    let vpOx = 0,
+      vpOy = 0,
+      vpW = 0,
+      vpH = 0;
+    const MEET_SEATS = ((D.PLACES.meeting && D.PLACES.meeting.spots) || []).map(sp => {
+      const [mx, my] = nearestWalkable(sp.x, sp.y);
+      return { x: mx, y: my };
+    });
+    let meetCX = 39 * T + 8,
+      meetCY = 5 * T + 8;
+    if (MEET_SEATS.length) {
+      let sxx = 0,
+        syy = 0;
+      for (const sp of MEET_SEATS) {
+        sxx += sp.x;
+        syy += sp.y;
+      }
+      sxx /= MEET_SEATS.length;
+      syy /= MEET_SEATS.length;
+      let bt = null,
+        bd = 1e9;
+      for (const fu of M.FURNITURE) {
+        if (fu.kind !== "table") continue;
+        const d2 = Math.hypot(fu.x - sxx, fu.y - syy);
+        if (d2 < bd) {
+          bd = d2;
+          bt = fu;
+        }
+      }
+      if (bt && bd < 6) {
+        meetCX = bt.x * T + 8;
+        meetCY = bt.y * T + 8;
+      } else {
+        meetCX = sxx * T + 8;
+        meetCY = syy * T + 8;
+      }
+    }
+    function freeMeetSeat() {
+      for (let k = 0; k < MEET_SEATS.length; k++) {
+        const st = MEET_SEATS[k];
+        let taken = false;
+        for (let i = 0; i < agents.length && !taken; i++) {
+          const o = agents[i];
+          if (o.state !== "meeting" && !(o.moving && o.nextState === "meeting")) continue;
+          if (o.tx === st.x && o.ty === st.y) taken = true;
+          else if (o.path.length) {
+            const pe = o.path[o.path.length - 1];
+            if (pe[0] === st.x && pe[1] === st.y) taken = true;
+          }
+        }
+        if (!taken) return st;
+      }
+      return null;
+    }
+    function stepMeeting(t) {
+      if (!_meetingNow) return;
+      for (let i = 0; i < agents.length; i++) {
+        const a = agents[i];
+        if (a.state !== "meeting" || a.moving) continue;
+        for (let j = 0; j < i; j++) {
+          const o = agents[j];
+          if (o.state !== "meeting" || o.moving) continue;
+          if (o.tx === a.tx && o.ty === a.ty) {
+            const st = freeMeetSeat();
+            if (st) sendTo(a, st, "meeting");
+            break;
+          }
+        }
+        if (a.moving) continue;
+        if (!a.gesture) {
+          const dx = meetCX - a.px,
+            dy = meetCY - a.py;
+          if (Math.abs(dx) + Math.abs(dy) >= 4) a.dir = Math.abs(dx) > Math.abs(dy) ? dx > 0 ? "right" : "left" : dy > 0 ? "down" : "up";
+        }
+        if (a.bubble) {
+          a._nodT = t + 2 + Math.random() * 3;
+          continue;
+        }
+        if (!a._nodT) {
+          a._nodT = t + 2 + Math.random() * 4;
+          continue;
+        }
+        if (t >= a._nodT && !a.gesture) {
+          a.gesture = { kind: "nod", t0: t, until: t + 0.8 };
+          a._nodT = t + 4 + Math.random() * 3;
+        }
+      }
+    }
+    const RY_WIN = { standup: [540, 585], lunch: [720, 770], winddown: [1080, 1125] };
+    const RY_SU_LINES = ["Standup nhanh — 60 giây thôi.", "Có blocker gì nói luôn nha.", "OK, quay lại việc thôi!"];
+    const RY_LN_LINES = ["Đi ăn trưa không?", "Pantry hay 7-Eleven đây?", "Cơm trưa đêêê."];
+    const RY_WD_LINES = ["Hết giờ rồi — về thôi!", "Mai chiến tiếp nha.", "Chốt sổ, nghỉ ngơi thôi."];
+    const RY_STAND_OFF = [[-1, 1], [1, 1], [0, 2], [-1, 2], [1, 2], [-2, 1], [2, 1], [0, 3]];
+    const RY_GATE = [[43, 43], [44, 43], [45, 43], [46, 43], [44, 44], [45, 44], [43, 44], [46, 44]];
+    let ry = null,
+      ryScanT = 0;
+    const ryDay = { standup: -1, lunch: -1, winddown: -1 };
+    function endRhythm(t) {
+      if (!ry) return;
+      for (const a of ry.members) {
+        a._ry = 0;
+        if (a.scripted || a.state === "down" || a.state === "reviving" || a.state === "meeting") continue;
+        a.snackStage = 0;
+        sendTo(a, { x: a.deskTile[0], y: a.deskTile[1] }, "working");
+        a.stateUntil = t + 12 + Math.random() * 10;
+      }
+      if (ry.lead) ry.lead._ry = 0;
+      ry = null;
+    }
+    function startRhythm(kind, t) {
+      if (ry) endRhythm(t);
+      const free = agents.filter(a => !busy(a) && a.state !== "meeting");
+      if (kind === "standup") {
+        const lead = agents.find(a => a.def.lead);
+        if (!lead) return false;
+        const members = free.filter(a => a !== lead).slice(0, RY_STAND_OFF.length);
+        if (members.length < 2) return false;
+        const ax = lead.deskTile[0],
+          ay = lead.deskTile[1];
+        for (let i = 0; i < members.length; i++) {
+          const a = members[i];
+          a._ry = 1;
+          a._duoCd = Math.max(a._duoCd || 0, t + 90);
+          const [gx, gy] = nearestWalkable(ax + RY_STAND_OFF[i][0], ay + RY_STAND_OFF[i][1]);
+          sendTo(a, { x: gx, y: gy }, "social");
+          a.stateUntil = t + 70;
+        }
+        let leadIn = false;
+        if (!busy(lead) && lead.state !== "meeting") {
+          lead._ry = 1;
+          leadIn = true;
+          sendTo(lead, { x: ax, y: ay }, "working");
+          lead.stateUntil = t + 70;
+        }
+        ry = { kind, ph: "go", members, lead, leadIn, axp: ax * T + 8, ayp: ay * T + 8, dl: t + 16, li: 0, lineAt: 0, endAt: 0 };
+        return true;
+      }
+      if (kind === "lunch") {
+        const venues = ["cafe", "store", "lobby"].filter(k => D.PLACES[k] && D.PLACES[k].spots && D.PLACES[k].spots.length);
+        if (!venues.length) return false;
+        const members = free.slice(0, 6);
+        if (members.length < 2) return false;
+        const ng = Math.min(venues.length, members.length >= 5 ? 3 : 2);
+        for (let i = 0; i < members.length; i++) {
+          const a = members[i];
+          const vk = venues[i % ng];
+          const spots = D.PLACES[vk].spots;
+          a._ry = 1;
+          a._duoCd = Math.max(a._duoCd || 0, t + 120);
+          a.pendingRelax = vk;
+          sendTo(a, spots[(i / ng | 0) % spots.length], "social");
+          a.stateUntil = t + 90;
+        }
+        say(members[0], RY_LN_LINES[Math.random() * RY_LN_LINES.length | 0], 4);
+        ry = { kind, ph: "linger", members, lead: null, dl: 0, li: 0, lineAt: 0, endAt: t + 42 + Math.random() * 16 };
+        return true;
+      }
+      const members = free.slice(0, Math.max(2, Math.ceil(free.length / 2)));
+      if (members.length < 2) return false;
+      for (let i = 0; i < members.length; i++) {
+        const a = members[i];
+        a._ry = 1;
+        a._duoCd = Math.max(a._duoCd || 0, t + 90);
+        const [gx, gy] = nearestWalkable(RY_GATE[i % RY_GATE.length][0], RY_GATE[i % RY_GATE.length][1]);
+        sendTo(a, { x: gx, y: gy }, "social");
+        a.stateUntil = t + 70;
+      }
+      ry = { kind: "winddown", ph: "go", members, lead: null, dl: t + 24, li: 0, lineAt: 0, endAt: 0 };
+      return true;
+    }
+    function stepRhythm(t) {
+      if (!ry) {
+        if (t < ryScanT) return;
+        ryScanT = t + 2;
+        const day = Date.now() / 864e5 | 0;
+        const m = world.time;
+        for (const k in RY_WIN) {
+          const w = RY_WIN[k];
+          if (m >= w[0] && m <= w[1] && ryDay[k] !== day) {
+            if (startRhythm(k, t)) ryDay[k] = day;
+            else ryScanT = t + 10;
+            return;
+          }
+        }
+        return;
+      }
+      const g = ry.members;
+      for (let i = g.length - 1; i >= 0; i--) {
+        const a = g[i];
+        if (a.scripted || a.inHuddle || a.inDuo || a.state === "down" || a.state === "reviving" || a.state === "meeting" || a.nextState === "meeting" && a.moving) {
+          a._ry = 0;
+          g.splice(i, 1);
+        }
+      }
+      if (ry.lead && ry.leadIn && (ry.lead.scripted || ry.lead.state === "down" || ry.lead.state === "reviving" || ry.lead.state === "meeting")) {
+        ry.lead._ry = 0;
+        ry.leadIn = false;
+      }
+      if (g.length < 2) {
+        endRhythm(t);
+        return;
+      }
+      if (ry.kind === "standup") {
+        if (ry.ph === "go") {
+          let settled = true;
+          for (let i = 0; i < g.length && settled; i++) if (g[i].moving) settled = false;
+          if (settled || t > ry.dl) {
+            ry.ph = "talk";
+            ry.endAt = t + 25;
+            ry.lineAt = t + 0.6;
+            const fx2 = ry.leadIn ? ry.lead.px : ry.axp,
+              fy2 = ry.leadIn ? ry.lead.py : ry.ayp;
+            for (const a of g) {
+              const dx = fx2 - a.px,
+                dy = fy2 - a.py;
+              if (Math.abs(dx) + Math.abs(dy) < 2) continue;
+              a.dir = Math.abs(dx) > Math.abs(dy) ? dx > 0 ? "right" : "left" : dy > 0 ? "down" : "up";
+            }
+            if (ry.leadIn) ry.lead.dir = "down";
+          }
+          return;
+        }
+        if (t >= ry.endAt) {
+          endRhythm(t);
+          return;
+        }
+        if (ry.li < 3 && t >= ry.lineAt) {
+          const own = ry.li !== 1;
+          const speaker = own && ry.leadIn ? ry.lead : g[(ry.li * 3 + 1) % g.length];
+          say(speaker, RY_SU_LINES[ry.li], 4);
+          if (!own && g.length > 1) {
+            const nd = g[(ry.li * 5 + 2) % g.length];
+            if (nd !== speaker && !nd.gesture) nd.gesture = { kind: "nod", t0: t + 0.5, until: t + 1.3 };
+          }
+          ry.li++;
+          ry.lineAt = t + 5.5;
+        }
+        return;
+      }
+      if (ry.kind === "lunch") {
+        if (t >= ry.endAt) endRhythm(t);
+        return;
+      }
+      if (ry.ph === "go") {
+        let settled = true;
+        for (let i = 0; i < g.length && settled; i++) if (g[i].moving) settled = false;
+        if (settled || t > ry.dl) {
+          ry.ph = "pause";
+          ry.endAt = t + 5 + Math.random() * 3;
+          let cx = 0,
+            cy = 0;
+          for (const a of g) {
+            cx += a.px;
+            cy += a.py;
+          }
+          cx /= g.length;
+          cy /= g.length;
+          for (const a of g) {
+            const dx = cx - a.px,
+              dy = cy - a.py;
+            if (Math.abs(dx) + Math.abs(dy) < 2) continue;
+            a.dir = Math.abs(dx) > Math.abs(dy) ? dx > 0 ? "right" : "left" : dy > 0 ? "down" : "up";
+          }
+          say(g[Math.random() * g.length | 0], RY_WD_LINES[Math.random() * RY_WD_LINES.length | 0], 3.5);
+        }
+        return;
+      }
+      if (t >= ry.endAt) endRhythm(t);
+    }
+    const cat = {
+      px: 0,
+      py: 0,
+      tx: 41,
+      ty: 21,
+      path: [],
+      state: "sit",
+      until: 0,
+      faceLR: "left",
+      followId: null,
+      repT: 0,
+      seat: null
+    };
+    {
+      const [cx0, cy0] = nearestWalkable(41, 21);
+      cat.tx = cx0;
+      cat.ty = cy0;
+      cat.px = cx0 * T + 8;
+      cat.py = cy0 * T + 8;
+    }
+    world.cat = cat;
+    function stepCat(dt, t) {
+      const c = cat;
+      if (c.path.length) {
+        const wp = c.path[0];
+        const gx = wp[0] * T + 8,
+          gy = wp[1] * T + 8;
+        const dx = gx - c.px,
+          dy = gy - c.py;
+        const dist = Math.hypot(dx, dy);
+        const adv = 26 * dt * world.settings.speed;
+        if (Math.abs(dx) > 0.5) c.faceLR = dx > 0 ? "right" : "left";
+        if (dist <= adv) {
+          c.px = gx;
+          c.py = gy;
+          c.tx = wp[0];
+          c.ty = wp[1];
+          c.path.shift();
+        } else {
+          c.px += dx / dist * adv;
+          c.py += dy / dist * adv;
+        }
+        if (!c.path.length) {
+          if (c.state === "sleepgo") {
+            c.state = "sleep";
+            if (c.seat) {
+              c.px = c.seat.sx;
+              c.py = c.seat.sy;
+            }
+            c.until = t + 24 + Math.random() * 22;
+          } else if (c.state === "wander") {
+            c.state = "sit";
+            c.until = t + 2 + Math.random() * 3;
+          }
+        }
+      }
+      if (c.state === "follow") {
+        const a = byId[c.followId];
+        if (!a || !a.moving || t > c.until || a.state === "down") {
+          c.path.length = 0;
+          c.followId = null;
+          c.state = "sit";
+          c.until = t + 3 + Math.random() * 4;
+          return;
+        }
+        if (t >= c.repT) {
+          c.repT = t + 0.8;
+          const md = Math.abs(a.tx - c.tx) + Math.abs(a.ty - c.ty);
+          if (md > 2) {
+            const p = findPath(c.tx, c.ty, a.tx, a.ty, CAT_BLOCKED);
+            if (p && p.length) {
+              if (p.length > 1) p.pop();
+              c.path = p;
+            }
+          } else c.path.length = 0;
+        }
+        return;
+      }
+      if (c.path.length || t < c.until) return;
+      const r = Math.random();
+      if (r < 0.34) {
+        let tries = 8;
+        while (tries--) {
+          const nx = c.tx + (Math.random() * 17 | 0) - 8,
+            ny = c.ty + (Math.random() * 13 | 0) - 6;
+          if (nx < 1 || ny < 1 || nx >= M.W - 1 || ny >= M.H - 1) continue;
+          if (!M.walkable(nx, ny) || M.g(nx, ny) === M.POOL) continue;
+          const p = findPath(c.tx, c.ty, nx, ny, CAT_BLOCKED);
+          if (p && p.length) {
+            c.path = p;
+            c.state = "wander";
+            break;
+          }
+        }
+        c.until = t + 2;
+      } else if (r < 0.52 && CAT_NAPS.length) {
+        const sp = CAT_NAPS[Math.random() * CAT_NAPS.length | 0];
+        const p = findPath(c.tx, c.ty, sp.x, sp.y, CAT_BLOCKED);
+        if (p && p.length) {
+          c.path = p;
+          c.seat = sp;
+          c.state = "sleepgo";
+          c.until = t + 40;
+        } else if (c.tx === sp.x && c.ty === sp.y) {
+          c.seat = sp;
+          c.state = "sleep";
+          c.px = sp.sx;
+          c.py = sp.sy;
+          c.until = t + 24 + Math.random() * 22;
+        } else c.until = t + 2;
+      } else if (r < 0.7) {
+        let mv = null;
+        const off = Math.random() * agents.length | 0;
+        for (let i = 0; i < agents.length && !mv; i++) {
+          const a2 = agents[(i + off) % agents.length];
+          if (a2.moving && a2.path.length && a2.state !== "down") mv = a2;
+        }
+        if (mv) {
+          c.state = "follow";
+          c.followId = mv.id;
+          c.until = t + 10;
+          c.repT = 0;
+        } else c.until = t + 2 + Math.random() * 2;
+      } else {
+        c.state = "sit";
+        c.until = t + 4 + Math.random() * 5;
+      }
+    }
+    let cloudCv = null;
+    const CLOUDS = [{ x: 140, y: 120, vx: 3.4, vy: 1.1, s: 1 }, { x: 520, y: 380, vx: 2.5, vy: -0.8, s: 1.5 }, { x: 860, y: 620, vx: 3.9, vy: 0.6, s: 1.2 }];
+    function cloudCanvas() {
+      if (cloudCv) return cloudCv;
+      cloudCv = document.createElement("canvas");
+      cloudCv.width = 160;
+      cloudCv.height = 100;
+      const cc = cloudCv.getContext("2d");
+      const grd = cc.createRadialGradient(80, 50, 8, 80, 50, 78);
+      grd.addColorStop(0, "rgba(24,30,40,0.9)");
+      grd.addColorStop(0.7, "rgba(24,30,40,0.45)");
+      grd.addColorStop(1, "rgba(24,30,40,0)");
+      cc.save();
+      cc.translate(80, 50);
+      cc.scale(1, 0.62);
+      cc.translate(-80, -50);
+      cc.fillStyle = grd;
+      cc.fillRect(0, 0, 160, 100);
+      cc.restore();
+      return cloudCv;
+    }
+    let rain = null,
+      rainDrops = null;
+    const PUDS = [];
+    for (let i = 0; i < PUD_N; i++) PUDS.push({ x: 0, y: 0, t0: -1e9, h: 0 });
+    function startRain(t, dur) {
+      if (!rainDrops) {
+        rainDrops = [];
+        for (let i = 0; i < RAIN_N; i++) rainDrops.push({ x: 0, y: 1e9, v: 150 + Math.random() * 70 });
+      }
+      rain = { t0: t, dur: dur || 45 + Math.random() * 30, k: 0 };
+    }
+    function spawnPuddles(t) {
+      if (!vpW) return;
+      const tx0 = Math.max(1, vpOx >> 4),
+        ty0 = Math.max(1, vpOy >> 4);
+      const tx1 = Math.min(M.W - 2, (vpOx + vpW >> 4) + 2),
+        ty1 = Math.min(M.H - 2, (vpOy + vpH >> 4) + 2);
+      const want = 4 + (Math.random() * 3 | 0);
+      let placed = 0;
+      for (let tries = 0; tries < 70 && placed < want && placed < PUD_N; tries++) {
+        const tx2 = tx0 + (Math.random() * (tx1 - tx0 + 1) | 0),
+          ty2 = ty0 + (Math.random() * (ty1 - ty0 + 1) | 0);
+        if (!M.walkable(tx2, ty2)) continue;
+        if (OUTDOOR_TIDS.indexOf(M.g(tx2, ty2)) < 0) continue;
+        const p = PUDS[placed];
+        p.x = tx2 * T + 3 + (M.hash(tx2 * 5, ty2 * 3) * 6 | 0);
+        p.y = ty2 * T + 6 + (M.hash(tx2 * 3, ty2 * 7) * 5 | 0);
+        p.h = M.hash(tx2, ty2);
+        p.t0 = t;
+        placed++;
+      }
+    }
+    function stepRain(dt, t) {
+      for (let i = 0; i < CLOUDS.length; i++) {
+        const cl = CLOUDS[i];
+        cl.x += cl.vx * dt;
+        cl.y += cl.vy * dt;
+        if (cl.x > M.W * T + 130) cl.x = -130;
+        if (cl.y > M.H * T + 90) cl.y = -90;
+        if (cl.y < -100) cl.y = M.H * T + 80;
+      }
+      if (!rain) {
+        if (!document.hidden && Math.random() < dt / 7200) startRain(t);
+        return;
+      }
+      const rt = t - rain.t0;
+      if (rt >= rain.dur) {
+        spawnPuddles(t);
+        rain = null;
+        return;
+      }
+      rain.k = Math.max(0, Math.min(1, Math.min(rt / 5, (rain.dur - rt) / 5)));
+      if (document.hidden || !vpW) return;
+      const n = Math.round(rain.k * RAIN_N);
+      for (let i = 0; i < n; i++) {
+        const d = rainDrops[i];
+        d.y += d.v * dt;
+        d.x += 14 * dt;
+        if (d.y > vpOy + vpH + 4 || d.x < vpOx - 30 || d.x > vpOx + vpW + 30) {
+          d.x = vpOx + Math.random() * vpW;
+          d.y = vpOy - 6 - Math.random() * 40;
+        }
+      }
+    }
+    world.forceRhythm = kind => {
+      if (!RY_WIN[kind]) return false;
+      ryDay[kind] = Date.now() / 864e5 | 0;
+      return startRhythm(kind, now());
+    };
+    world.forceWeather = on => {
+      const t = now();
+      if (on) {
+        if (!rain) startRain(t);
+        else rain.dur = Math.max(rain.dur, t - rain.t0 + 30);
+      } else if (rain) rain.dur = Math.min(rain.dur, t - rain.t0 + 4);
+      return !!rain;
+    };
     function critAnim(c, kind, dur, amp = 1, n = 1) {
       c.anim = { kind, t0: now(), dur, amp, n };
     }
@@ -2899,8 +3525,20 @@ const ASWorld = (() => {
       stepCritterAI(world._green, "_green", dt, t, _missionActive, _meetingNow);
     }
     function step(dt, t) {
-      world.time = utc7Minutes();
+      world.time = world.timeOverride ?? utc7Minutes();
       world.settings.night = world.time < 6 * 60 || world.time >= 18 * 60;
+      {
+        const m = world.time;
+        let sm = 1;
+        if (m >= 360 && m < 1080) {
+          sm = 0.8 + 0.45 * Math.abs(Math.cos((m - 360) / 720 * Math.PI));
+          if (m < 390) sm = 1 + (sm - 1) * ((m - 360) / 30);
+          else if (m >= 1050) sm += (1 - sm) * ((m - 1050) / 30);
+        }
+        SH_MUL = sm;
+        SH_HW0 = Math.round(5 * sm);
+        SH_HW1 = Math.round(3 * sm);
+      }
       if (world.camTarget) {
         const k = Math.min(1, dt * 2.6);
         world.cam.x += (world.camTarget.x - world.cam.x) * k;
@@ -3157,6 +3795,10 @@ const ASWorld = (() => {
       stepRevive(t);
       stepCommute(dt, t);
       stepWave(t);
+      stepRhythm(t);
+      stepMeeting(t);
+      stepCat(dt, t);
+      stepRain(dt, t);
       agents.forEach(a => {
         ambient(a, t);
         stepChoreo(a, dt, t);
@@ -3233,6 +3875,10 @@ const ASWorld = (() => {
       world.cam.y = Math.max(bh / 2, Math.min(M.H * T - bh / 2, world.cam.y));
       const ox = Math.round(world.cam.x - bw / 2),
         oy = Math.round(world.cam.y - bh / 2);
+      vpOx = ox;
+      vpOy = oy;
+      vpW = bw;
+      vpH = bh;
       b.fillStyle = "#F2EFE6";
       b.fillRect(0, 0, bw, bh);
       b.drawImage(mapCanvas, -ox, -oy);
@@ -3385,6 +4031,39 @@ const ASWorld = (() => {
           }
         }
       }
+      {
+        const ccv = cloudCanvas();
+        b.globalAlpha = 0.06;
+        for (let i = 0; i < CLOUDS.length; i++) {
+          const cl = CLOUDS[i];
+          const cw = Math.round(160 * cl.s),
+            ch = Math.round(100 * cl.s);
+          const cx2 = Math.round(cl.x - cw / 2) - ox,
+            cy2 = Math.round(cl.y - ch / 2) - oy;
+          if (cx2 > bw || cy2 > bh || cx2 + cw < 0 || cy2 + ch < 0) continue;
+          b.drawImage(ccv, cx2, cy2, cw, ch);
+        }
+        b.globalAlpha = 1;
+        const tw2 = world._last;
+        for (let i = 0; i < PUD_N; i++) {
+          const p = PUDS[i];
+          const age = tw2 - p.t0;
+          if (age < 0 || age > 120) continue;
+          const px2 = p.x - ox,
+            py2 = p.y - oy;
+          if (px2 < -8 || px2 > bw + 8 || py2 < -6 || py2 > bh + 6) continue;
+          b.globalAlpha = age < 90 ? 0.85 : 0.85 * (1 - (age - 90) / 30);
+          const w2 = 5 + (p.h * 3 | 0);
+          b.fillStyle = PUD_DK;
+          b.fillRect(px2 - 1, py2, w2 + 2, 2);
+          b.fillRect(px2, py2 - 1, w2, 4);
+          b.fillStyle = PUD_BASE;
+          b.fillRect(px2, py2, w2, 2);
+          b.fillStyle = PUD_GL;
+          b.fillRect(px2 + 1 + (p.h * w2 * 0.6 | 0), py2, 1, 1);
+          b.globalAlpha = 1;
+        }
+      }
       if (world._commute) {
         const cm = world._commute;
         const CX = Math.round(cm.cx) - ox,
@@ -3448,16 +4127,37 @@ const ASWorld = (() => {
         }
       }
       const sorted = [...agents].sort((p, q) => p.py - q.py);
+      let catDrawn = false;
+      const paintCat = () => {
+        catDrawn = true;
+        if (cat.px < ox - 20 || cat.px > ox + bw + 20 || cat.py < oy - 20 || cat.py > oy + bh + 20) return;
+        b.save();
+        b.translate(-ox, -oy);
+        drawCat(b, cat, world._frame, world._last);
+        b.restore();
+      };
       sorted.forEach(a => {
+        if (!catDrawn && cat.py <= a.py) paintCat();
         b.save();
         b.translate(-ox, -oy);
         if (a.state !== "swim") {
           const fx = Math.round(a.px),
             fy = Math.round(a.py) + 7;
           b.fillStyle = "rgba(38,28,14,0.16)";
-          b.fillRect(fx - 4, fy - 1, 10, 2);
-          b.fillRect(fx - 2, fy - 2, 6, 1);
-          b.fillRect(fx - 2, fy + 1, 6, 1);
+          b.fillRect(fx + 1 - SH_HW0, fy - 1, SH_HW0 * 2, 2);
+          b.fillRect(fx + 1 - SH_HW1, fy - 2, SH_HW1 * 2, 1);
+          b.fillRect(fx + 1 - SH_HW1, fy + 1, SH_HW1 * 2, 1);
+        }
+        if (a.state === "meeting" && a.bubble && !a.moving) {
+          const rc = D.PROVIDERS[a.def.provider].color;
+          const pu = world._frame >> 1 & 1;
+          const rx = Math.round(a.px),
+            ryy = Math.round(a.py) + 6;
+          b.lineWidth = 1;
+          b.strokeStyle = shadeHex(rc, -55);
+          b.strokeRect(rx - 6.5 - pu, ryy - 2.5 - pu, 13 + pu * 2, 5 + pu * 2);
+          b.strokeStyle = shadeHex(rc, 20);
+          b.strokeRect(rx - 5.5, ryy - 1.5, 11, 3);
         }
         if (world.selected === a.id) {
           b.strokeStyle = D.PROVIDERS[a.def.provider].color;
@@ -3467,6 +4167,7 @@ const ASWorld = (() => {
         drawAgent(b, a, world._frame, world._last);
         b.restore();
       });
+      if (!catDrawn) paintCat();
       {
         const tnow = performance.now() / 1000;
         world.fx = world.fx.filter(f => tnow - f.t0 < f.dur + 0.4);
@@ -3791,6 +4492,19 @@ const ASWorld = (() => {
           }
         }
       }
+      if (rain && rain.k > 0.01 && !document.hidden) {
+        const rn = Math.round(rain.k * RAIN_N);
+        b.fillStyle = RAIN_COL;
+        for (let i = 0; i < rn; i++) {
+          const d = rainDrops[i];
+          const rx = (d.x | 0) - ox,
+            ryy = (d.y | 0) - oy;
+          if (rx < 0 || rx > bw || ryy < -3 || ryy > bh) continue;
+          b.fillRect(rx, ryy, 1, 3);
+        }
+        b.fillStyle = `rgba(36,48,70,${(rain.k * 0.1).toFixed(3)})`;
+        b.fillRect(0, 0, bw, bh);
+      }
       {
         for (let i = 0; i < 4; i++) {
           const ins = i * 10;
@@ -3875,17 +4589,11 @@ const ASWorld = (() => {
         if (sx < -80 || sx > vw + 80 || sy < -80 || sy > vh + 80) return;
         ctx.fillStyle = "rgba(38,28,14,0.15)";
         ctx.beginPath();
-        ctx.ellipse(sx + z, sy + (CRIT_SHADOW[key] || 0) * z, 6.5 * z, 2.4 * z, 0, 0, Math.PI * 2);
+        ctx.ellipse(sx + z, sy + (CRIT_SHADOW[key] || 0) * z, 6.5 * z * SH_MUL, 2.4 * z, 0, 0, Math.PI * 2);
         ctx.fill();
         drawCritterImg(ctx, c, key, sx, sy, z, world._frame, world._last);
         if (c.emote) drawEmote(ctx, c, sx, sy - 13 * z, z, world._frame);
         if (world.settings.labels) drawCritterLabel(ctx, sx, sy, z, CRITTER_NAME[key] || "", CRITTER_LABEL[key]);
-      });
-      sorted.forEach(a => {
-        const [sx, sy] = toScreen(a.px, a.py);
-        if (world.settings.labels) drawLabel(ctx, a, sx, sy, z);
-        if (a.bubble) drawBubble(ctx, a, sx, sy, z);else if (a.emote) drawEmote(ctx, a, sx, sy, z, world._frame);
-        if (a.state === "down") drawAlert(ctx, sx, sy, z, world._frame);
       });
       {
         const lz = z <= 3 ? 1 : z >= 4.5 ? 0 : (4.5 - z) / 1.5;
@@ -3943,6 +4651,51 @@ const ASWorld = (() => {
           ctx.restore();
         }
       }
+      let bn = 0;
+      sorted.forEach(a => {
+        const [sx, sy] = toScreen(a.px, a.py);
+        if (world.settings.labels) drawLabel(ctx, a, sx, sy, z);
+        if (a.bubble) {
+          if (bn < BUB_MAX) {
+            const s = BUBS[bn];
+            s.a = a;
+            s.sx = sx;
+            s.sy = sy;
+            layoutBubble(ctx, s, z);
+            if (s.bx <= vw && s.bx + s.w >= 0 && s.by <= vh && s.by + s.h >= 0) bn++;
+          }
+        } else if (a.emote) drawEmote(ctx, a, sx, sy, z, world._frame);
+        if (a.state === "down") drawAlert(ctx, sx, sy, z, world._frame);
+      });
+      if (bn) {
+        for (let i = 1; i < bn; i++) for (let j = i; j > 0 && BUBS[j].t0 < BUBS[j - 1].t0; j--) {
+          const tmp = BUBS[j];
+          BUBS[j] = BUBS[j - 1];
+          BUBS[j - 1] = tmp;
+        }
+        for (let i = 0; i < bn; i++) BUBS[i].dy = 0;
+        for (let i = 1; i < bn; i++) {
+          let guard = 0,
+            moved = true;
+          while (moved && guard++ <= bn) {
+            moved = false;
+            for (let j = 0; j < i; j++) {
+              const A = BUBS[i],
+                B2 = BUBS[j];
+              const ay0 = A.by + A.dy,
+                by0 = B2.by + B2.dy;
+              if (A.bx < B2.bx + B2.w && A.bx + A.w > B2.bx && ay0 < by0 + B2.h && ay0 + A.h > by0) {
+                A.dy = by0 - 2 - A.h - A.by;
+                moved = true;
+              }
+            }
+          }
+        }
+        for (let i = 0; i < bn; i++) {
+          paintBubble(ctx, BUBS[i]);
+          BUBS[i].a = null;
+        }
+      }
     }
     function drawLabel(ctx2, a, sx, sy, z) {
       const c = D.PROVIDERS[a.def.provider].color;
@@ -3950,9 +4703,17 @@ const ASWorld = (() => {
       ctx2.font = "700 11px ui-monospace, Menlo, monospace";
       const w = ctx2.measureText(label).width + 14;
       const yTop = sy + 8 * (z / 3) + 6;
-      ctx2.fillStyle = "rgba(20,28,24,0.80)";
-      ctx2.fillRect(Math.round(sx - w / 2), Math.round(yTop), Math.round(w), 20);
-      ctx2.fillStyle = a.state === "down" ? "#F87171" : c;
+      const bx = Math.round(sx - w / 2),
+        by = Math.round(yTop),
+        bwd = Math.round(w);
+      ctx2.fillStyle = "rgba(26,32,54,0.9)";
+      ctx2.fillRect(bx, by + 1, bwd, 18);
+      ctx2.fillRect(bx + 1, by, bwd - 2, 20);
+      ctx2.fillStyle = "rgba(255,246,216,0.22)";
+      ctx2.fillRect(bx + 1, by, bwd - 2, 1);
+      ctx2.fillStyle = "rgba(12,16,32,0.6)";
+      ctx2.fillRect(bx + 1, by + 19, bwd - 2, 1);
+      ctx2.fillStyle = a.state === "down" ? "#F09A93" : c;
       ctx2.textAlign = "center";
       ctx2.fillText(label, sx, yTop + 13);
       ctx2.textAlign = "left";
@@ -3961,38 +4722,64 @@ const ASWorld = (() => {
       ctx2.font = "700 11px ui-monospace, Menlo, monospace";
       const w = ctx2.measureText(name).width + 14;
       const yTop = Math.round(sy + 8 * z - 30 * z - 22);
-      ctx2.fillStyle = "rgba(20,28,24,0.80)";
-      ctx2.fillRect(Math.round(sx - w / 2), yTop, Math.round(w), 18);
+      const cbx = Math.round(sx - w / 2),
+        cbw = Math.round(w);
+      ctx2.fillStyle = "rgba(26,32,54,0.9)";
+      ctx2.fillRect(cbx, yTop + 1, cbw, 16);
+      ctx2.fillRect(cbx + 1, yTop, cbw - 2, 18);
+      ctx2.fillStyle = "rgba(255,246,216,0.22)";
+      ctx2.fillRect(cbx + 1, yTop, cbw - 2, 1);
       ctx2.fillStyle = col || "#FFB23E";
       ctx2.textAlign = "center";
       ctx2.fillText(name, sx, yTop + 13);
       ctx2.textAlign = "left";
     }
-    function drawBubble(ctx2, a, sx, sy, z) {
+    const BUB_MAX = 8;
+    const BUBS = [];
+    for (let i = 0; i < BUB_MAX; i++) BUBS.push({ a: null, sx: 0, sy: 0, w: 0, h: 0, bx: 0, by: 0, dy: 0, t0: 0, err: false, grow: false, txtOn: true, lines: [] });
+    function layoutBubble(ctx2, s, z) {
+      const a = s.a;
       const text = a.bubble.text || "";
-      const err = a.bubble.tone === "error";
+      s.err = a.bubble.tone === "error";
       ctx2.font = "12px ui-monospace, Menlo, monospace";
       const maxW = 190;
       const words = text.split(" ");
-      const lines = [];
+      s.lines.length = 0;
       let cur = "";
-      words.forEach(wd => {
-        const tryLine = cur ? cur + " " + wd : wd;
+      for (let i = 0; i < words.length; i++) {
+        const tryLine = cur ? cur + " " + words[i] : words[i];
         if (ctx2.measureText(tryLine).width > maxW && cur) {
-          lines.push(cur);
-          cur = wd;
+          s.lines.push(cur);
+          cur = words[i];
         } else cur = tryLine;
-      });
-      if (cur) lines.push(cur);
-      const w = Math.min(maxW, Math.max(...lines.map(l => ctx2.measureText(l).width))) + 16;
-      const h = lines.length * 15 + 12;
-      const bx = Math.round(sx - w / 2),
-        by = Math.round(sy - 16 * (z / 3) - h - 14);
-      const age = now() - (a.bubble.t0 ?? -1);
-      if (age < 0.08) {
+      }
+      if (cur) s.lines.push(cur);
+      let lw = 0;
+      for (let i = 0; i < s.lines.length; i++) {
+        const w2 = ctx2.measureText(s.lines[i]).width;
+        if (w2 > lw) lw = w2;
+      }
+      s.w = Math.min(maxW, lw) + 16;
+      s.h = s.lines.length * 15 + 12;
+      s.bx = Math.round(s.sx - s.w / 2);
+      s.by = Math.round(s.sy - 16 * (z / 3) - s.h - 14);
+      s.t0 = a.bubble.t0 ?? -1;
+      const age = now() - s.t0;
+      s.grow = age < 0.08;
+      s.txtOn = age >= 0.15;
+      s.dy = 0;
+    }
+    function paintBubble(ctx2, s) {
+      const err = s.err;
+      const bx = s.bx,
+        by = s.by + s.dy,
+        w = s.w,
+        h = s.h;
+      ctx2.font = "12px ui-monospace, Menlo, monospace";
+      if (s.grow) {
         const w2 = Math.round(w / 2),
           h2 = Math.round(h / 2);
-        const bx2 = Math.round(sx - w2 / 2),
+        const bx2 = Math.round(s.sx - w2 / 2),
           by2 = by + h - h2;
         ctx2.fillStyle = err ? "#FFF1F1" : "#FFFDF7";
         ctx2.fillRect(bx2, by2, w2, h2);
@@ -4000,7 +4787,7 @@ const ASWorld = (() => {
         ctx2.lineWidth = 2;
         ctx2.strokeRect(bx2 + 1, by2 + 1, w2 - 2, h2 - 2);
         ctx2.fillStyle = err ? "#FFF1F1" : "#FFFDF7";
-        ctx2.fillRect(Math.round(sx) - 3, by + h, 6, 3);
+        ctx2.fillRect(Math.round(s.sx) - 3, by + h, 6, 3);
         return;
       }
       ctx2.fillStyle = err ? "#FFF1F1" : "#FFFDF7";
@@ -4009,11 +4796,11 @@ const ASWorld = (() => {
       ctx2.lineWidth = 2;
       ctx2.strokeRect(bx + 1, by + 1, w - 2, h - 2);
       ctx2.fillStyle = err ? "#FFF1F1" : "#FFFDF7";
-      ctx2.fillRect(Math.round(sx) - 5, by + h, 10, 4);
-      ctx2.fillRect(Math.round(sx) - 2, by + h + 4, 4, 4);
-      if (age < 0.15) return;
+      ctx2.fillRect(Math.round(s.sx) - 5, by + h, 10, 4);
+      ctx2.fillRect(Math.round(s.sx) - 2, by + h + 4, 4, 4);
+      if (!s.txtOn) return;
       ctx2.fillStyle = err ? "#B91C1C" : "#2A2622";
-      lines.forEach((l, i) => ctx2.fillText(l, bx + 8, by + 17 + i * 15));
+      for (let i = 0; i < s.lines.length; i++) ctx2.fillText(s.lines[i], bx + 8, by + 17 + i * 15);
     }
     let drag = null,
       downAt = null;

@@ -98,7 +98,7 @@ async function callResponsesApi({
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     if (isPromptBlocked(res.status, text)) throw new PromptBlocked("prompt blocked by provider usage policy");
-    throw new Error(`LLM ${res.status}: ${text.slice(0, 300)}`);
+    throw llmHttpError(res.status, text);
   }
   const json = await res.json();
   let content = "";
@@ -160,7 +160,7 @@ async function callApi({
       return callApi({ model, messages, tools, temperature, maxTokens, jsonMode: false }, attempt);
     }
     if (isPromptBlocked(res.status, text)) throw new PromptBlocked("prompt blocked by provider usage policy");
-    throw new Error(`LLM ${res.status}: ${text.slice(0, 300)}`);
+    throw llmHttpError(res.status, text);
   }
   const json = await res.json();
   const choice = json.choices?.[0];
@@ -241,6 +241,36 @@ let modelsCache = {
 try {
   modelsCache = JSON.parse(fs.readFileSync(MODELS_CACHE_PATH, "utf8"));
 } catch {}
+let modelsFailAt = 0;
+let catalogTriedAt = 0;
+export function modelsMeta() {
+  return { at: modelsCache.at || 0, failing: modelsFailAt > modelsCache.at, via: modelsCache.via || "maas" };
+}
+async function catalogFallback() {
+  if (Date.now() - catalogTriedAt < 300_000) return modelsCache.list;
+  catalogTriedAt = Date.now();
+  try {
+    const { fetchCatalog } = await import("./catalog.js");
+    const list = await fetchCatalog();
+    if (list && list.length) {
+      modelsCache = { at: Date.now(), list, via: "catalog" };
+      fs.writeFileSync(MODELS_CACHE_PATH, JSON.stringify(modelsCache, null, 2));
+      console.log(`[agent-runtime] model catalog refreshed via AIP management API → ${list.length} chat models (data-plane unavailable)`);
+    }
+  } catch (err) {
+    console.warn(`[agent-runtime] AIP catalog fallback failed (${err.message})`);
+  }
+  return modelsCache.list;
+}
+function llmHttpError(status, text) {
+  let msg = "";
+  try {
+    const j = JSON.parse(text);
+    msg = j.message || j.error?.message || j.error || "";
+  } catch {}
+  msg = String(msg || text).replace(/\s+/g, " ").replace(/"?request_id"?\s*[:=]?\s*"?[a-f0-9-]+"?,?/gi, "").replace(/[{}"]/g, "").trim();
+  return new Error(`LLM ${status}: ${msg.slice(0, 140) || "provider error"}`);
+}
 async function probeModel(id) {
   try {
     const res = usesResponsesApi(id) ? await fetch(`${BASE_URL}/responses`, {
@@ -282,6 +312,7 @@ async function probeModel(id) {
 export async function listModels() {
   if (modelsCache.list && Date.now() - modelsCache.at < 600_000) return modelsCache.list;
   if (!BASE_URL || !API_KEY) return modelsCache.list;
+  if (modelsFailAt && Date.now() - modelsFailAt < 60_000) return modelsCache.list;
   try {
     const res = await fetch(`${BASE_URL}/models`, {
       headers: {
@@ -290,8 +321,9 @@ export async function listModels() {
       signal: AbortSignal.timeout(10_000)
     });
     if (!res.ok) {
+      modelsFailAt = Date.now();
       console.warn(`[agent-runtime] MaaS /models → ${res.status} ${(await res.text().catch(() => "")).slice(0, 120)} — serving ${modelsCache.list ? "cached" : "fallback"} list`);
-      return modelsCache.list;
+      return catalogFallback();
     }
     const json = await res.json();
     const raw = Array.isArray(json) ? json : json.data || json.models || [];
@@ -308,19 +340,23 @@ export async function listModels() {
     const probes = await Promise.all(candidates.map(m => probeModel(m.id)));
     const list = candidates.filter((_, i) => probes[i]);
     if (!list.length) {
+      modelsFailAt = Date.now();
       console.warn(`[agent-runtime] MaaS /models: no callable models (${candidates.length} candidates) — serving ${modelsCache.list ? "cached" : "fallback"} list`);
-      return modelsCache.list;
+      return catalogFallback();
     }
+    modelsFailAt = 0;
     modelsCache = {
       at: Date.now(),
-      list
+      list,
+      via: "maas"
     };
     fs.writeFileSync(MODELS_CACHE_PATH, JSON.stringify(modelsCache, null, 2));
     console.log(`[agent-runtime] MaaS /models → ${chat.length} in catalog + ${known.length} known extras, ${list.length} callable`);
     return list;
   } catch (err) {
+    modelsFailAt = Date.now();
     console.warn(`[agent-runtime] MaaS /models unreachable (${err.message}) — serving ${modelsCache.list ? "cached" : "fallback"} list`);
-    return modelsCache.list;
+    return catalogFallback();
   }
 }
 const stripReasoning = s => String(s).replace(/<think>[\s\S]*?<\/think>/gi, " ").replace(/<\/?(?:think|reasoning|scratchpad|thought)>/gi, " ");

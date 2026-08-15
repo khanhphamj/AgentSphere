@@ -8,6 +8,8 @@ export const PROVIDERS = {
   gemini: { label: "gemini", color: "#7B61FF", soft: "#E8E3FF" },
   bytedance: { label: "bytedance", color: "#00B2C2", soft: "#D8F4F7" },
   minimax: { label: "minimax", color: "#E0457B", soft: "#FBDFEA" },
+  kimi: { label: "kimi", color: "#16161A", soft: "#E9E9EE" },
+  "z-ai": { label: "z.ai", color: "#3B3F46", soft: "#E7E9ED" },
   anthropic: { label: "anthropic", color: "#C96342", soft: "#F7E3DB" }
 };
 
@@ -22,6 +24,8 @@ export function providerOf(modelId) {
   if (org === "gemini") return "gemini";
   if (org === "bytedance") return "bytedance";
   if (org.startsWith("minimax")) return "minimax";
+  if (org === "kimi" || org === "moonshot") return "kimi";
+  if (org === "z-ai" || org === "zai" || org === "zhipu") return "z-ai";
   if (org === "anthropic") return "anthropic";
   return "greennode";
 }
@@ -35,16 +39,37 @@ export const MODELS = [
   { value: "openai/gpt-5", provider: "openai" },
   { value: "openai/gpt-5-mini", provider: "openai" },
   { value: "openai/gpt-5-nano", provider: "openai" },
+  { value: "gemini/gemini-3-flash-preview", provider: "gemini" },
+  { value: "gemini/gemini-3.1-flash-lite", provider: "gemini" },
+  { value: "gemini/gemini-2.5-flash", provider: "gemini" },
+  { value: "gemini/gemini-2.5-flash-lite", provider: "gemini" },
+  { value: "kimi/kimi-k2.6", provider: "kimi" },
+  { value: "kimi/kimi-k2.7-code", provider: "kimi" },
+  { value: "z-ai/glm-5.2", provider: "z-ai" },
+  { value: "minimax/minimax-m3", provider: "minimax" },
+  { value: "deepseek/deepseek-v4-flash", provider: "deepseek" },
+  { value: "deepseek/deepseek-chat", provider: "deepseek" },
   { value: "google/gemma-3-27b-it", provider: "google" },
   { value: "google/gemma-4-31b-it", provider: "google" },
   { value: "minimax/minimax-m2.5", provider: "minimax" },
   { value: "greennode/greenmind-medium-14b-r1", provider: "greennode" }
 ];
 
+export function humanizeModelError(err) {
+  const s = String(err || "");
+  if (/403|access denied|quota|credit|budget/i.test(s)) return "model access blocked (quota/credit — 403)";
+  if (/429|rate.?limit/i.test(s)) return "model rate-limited (429)";
+  if (/timeout|timed out|abort/i.test(s)) return "model timed out";
+  if (/unreachable|fetch failed|network|ENOTFOUND|ECONN/i.test(s)) return "model unreachable";
+  if (/unusable format|truncated/i.test(s)) return "model answered in an unusable format";
+  const m = s.match(/LLM \d+:\s*(.{1,80})/);
+  return (m ? m[1].trim() : s.replace(/[{}"]/g, "").slice(0, 90).trim()) || "model error";
+}
+
 export const AGENTS = [
   {
     id: "atlas", name: "Atlas", lead: true, role: "Lead orchestrator",
-    provider: "openai", model: "openai/gpt-5-mini", models: ["openai/gpt-5-mini"], agentRole: "orchestrator", policyRole: "orchestrator",
+    provider: "openai", model: "openai/gpt-5", models: ["openai/gpt-5"], agentRole: "orchestrator", policyRole: "orchestrator",
     home: "office", desk: { x: 10, y: 14 },
     palette: { shirt: "#4D6BFE", hair: "#3A2E28", skin: "#EFC9A8" },
     skills: ["Planning", "Phasing", "Check & synthesis"],
@@ -206,6 +231,19 @@ export const STR = {
     inbox: "Inbox",
     mission: "New task"
   },
+  guide: {
+    title: "Your squad is ready",
+    line: "Ask a decision — the squad researches, debates, and returns one recommendation.",
+    examples: [
+      "Nên chọn Postgres hay MongoDB cho log 50GB/ngày?",
+      "Slack vs Zalo cho team 12 người?",
+      "Có nên mở POD service mới ở HCM?"
+    ]
+  },
+  theme: {
+    toDark: "Switch to dark mode",
+    toLight: "Switch to light mode"
+  },
   status: {
     working: "Working",
     moving: "Moving",
@@ -279,6 +317,13 @@ export const STR = {
     answer: "Conclusion",
     report: "Full report",
     tasks: "Missions",
+    searchMissions: "Search missions…",
+    filterAll: "All",
+    filterDone: "Done",
+    filterFailed: "Failed",
+    filterCancelled: "Cancelled",
+    searchEmptyTitle: "No matches",
+    searchEmptyLine: "No missions match your search or filter — clear them to see the full history.",
     noTasks: "No missions yet — assign the first one from the dock.",
     backToList: "Back to the list",
     missionFailed: "Mission failed",
@@ -334,8 +379,11 @@ export const STR = {
   },
   onboarding: {
     squadDesc: "Each agent runs a different GreenNode MaaS model for diverse perspectives. Name them and pick models as you like — all changeable later.",
+    leadTip: "Tip: keep a frontier-tier lead (gpt-5) — workers can stay fast/cheap.",
     onbNext: "Optional — click “Create squad” to use the defaults. Next step: assign your first mission.",
     modelsLive: "Enabled models loaded from your GreenNode MaaS account",
+    modelsCached: "Model list from your MaaS account (cached — MaaS is currently unreachable)",
+    modelsCatalog: "Live MaaS catalog (via management API) — model calls are quota-blocked right now, some models may not answer until quota is restored",
     modelsFallback: "Offline catalog — could not reach the MaaS model list",
     nameCol: "Agent name",
     modelCol: "Model",

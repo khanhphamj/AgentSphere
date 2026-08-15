@@ -4,7 +4,7 @@ import http from "node:http";
 import { attach, timeline, emit, setMissionOwner } from "./events.js";
 import { createMission, runMission, isStatusTitle } from "./pipeline.js";
 import { getSquadFor, setSquadFor, loadSquadInto, buildSquad } from "./squad.js";
-import { missionStore, briefingStore, configStore, standingStore, calibrationStore } from "./db.js";
+import { missionStore, eventStore, briefingStore, configStore, standingStore, calibrationStore } from "./db.js";
 const PORT = Number(process.env.ORCHESTRATOR_PORT || 8081);
 const CLIENT_ID = process.env.CLIENT_ID || "";
 const CLIENT_SECRET = process.env.CLIENT_SECRET || "";
@@ -41,6 +41,45 @@ const controllers = new Map();
 const GLOBAL_MAX = Math.max(1, Number(process.env.MAX_CONCURRENT_MISSIONS || 3));
 const PER_USER_MAX = Math.max(1, Number(process.env.MAX_CONCURRENT_PER_USER || 1));
 const MISSION_DEADLINE_MS = Math.max(60_000, Number(process.env.MISSION_DEADLINE_MS || 1_800_000));
+const TERMINAL_STATUSES = new Set(["done", "failed", "cancelled"]);
+const isTerminal = m => TERMINAL_STATUSES.has(m?.status);
+const MISSION_CACHE_MAX = Math.max(20, Number(process.env.MISSION_CACHE_MAX || 200));
+const MISSION_RAM_ONLY_MAX = Math.max(MISSION_CACHE_MAX, Number(process.env.MISSION_RAM_ONLY_MAX || 300));
+let evictionAnnounced = false;
+function touchMission(m) {
+  missions.delete(m.id);
+  missions.set(m.id, m);
+  return m;
+}
+function enforceMissionCap() {
+  const dbMode = missionStore.available();
+  const cap = dbMode ? MISSION_CACHE_MAX : MISSION_RAM_ONLY_MAX;
+  let terminal = 0;
+  for (const m of missions.values()) if (isTerminal(m)) terminal++;
+  if (terminal <= cap) return;
+  for (const [id, m] of missions) {
+    if (terminal <= cap) break;
+    if (!isTerminal(m)) continue;
+    missions.delete(id);
+    terminal--;
+    if (!evictionAnnounced) {
+      evictionAnnounced = true;
+      console.log(`[orchestrator] mission cache reached ${cap} finished missions — evicting oldest from RAM${dbMode ? " (rows stay in the database, reloaded on demand)" : " (no database: oldest history is dropped)"}`);
+    }
+  }
+}
+async function getMission(id) {
+  const hit = missions.get(id);
+  if (hit) return touchMission(hit);
+  const row = await missionStore.loadOne(id);
+  if (!row) return null;
+  const raced = missions.get(id);
+  if (raced) return touchMission(raced);
+  missions.set(row.id, row);
+  setMissionOwner(row.id, row.userEmail);
+  enforceMissionCap();
+  return row;
+}
 const ownerKey = email => (email || "").toLowerCase().trim() || "_anon";
 function userInflight(email) {
   const k = ownerKey(email);
@@ -58,6 +97,8 @@ function startMission(m) {
     controllers.delete(m.id);
     inflight.delete(m.id);
     missionStore.save(m);
+    if (missions.has(m.id)) touchMission(m);
+    enforceMissionCap();
     pump();
   });
 }
@@ -82,11 +123,9 @@ function enqueue(id, { priority = false } = {}) {
   pump();
 }
 const userOf = req => (req.get("x-user-email") || "").toLowerCase().trim() || null;
-for (const m of await missionStore.loadAll()) {
-  if (m.status !== "done" && m.status !== "failed" && m.status !== "cancelled") {
+for (const m of await missionStore.loadBoot(100)) {
+  if (!isTerminal(m)) {
     m.status = "failed";
-    missions.set(m.id, m);
-    setMissionOwner(m.id, m.userEmail);
     missionStore.save(m);
     briefingStore.add({
       id: `b_${m.id}`,
@@ -99,15 +138,24 @@ for (const m of await missionStore.loadAll()) {
       userEmail: m.userEmail || null,
       at: Date.now()
     });
-  } else {
-    missions.set(m.id, m);
-    setMissionOwner(m.id, m.userEmail);
   }
+  missions.set(m.id, m);
+  setMissionOwner(m.id, m.userEmail);
 }
-if (missions.size) console.log(`[orchestrator] restored ${missions.size} missions from database`);
+enforceMissionCap();
+if (missions.size) console.log(`[orchestrator] restored ${missions.size} recent missions from database (older history loads on demand)`);
 const savedSquads = await configStore.loadAllSquads();
 for (const { email, squad } of savedSquads) loadSquadInto(email, squad);
 if (savedSquads.length) console.log(`[orchestrator] restored squad config for ${savedSquads.length} account(s)`);
+const EVENT_TTL_DAYS = Math.max(1, Number(process.env.MISSION_EVENTS_TTL_DAYS || 30));
+async function pruneEvents() {
+  try {
+    const n = await eventStore.prune(EVENT_TTL_DAYS);
+    if (n > 0) console.log(`[orchestrator] pruned ${n} mission events older than ${EVENT_TTL_DAYS} days`);
+  } catch {}
+}
+pruneEvents();
+setInterval(pruneEvents, 86_400_000).unref();
 process.on("unhandledRejection", err => console.error("[orchestrator] unhandled rejection (kept alive):", err?.message || err));
 process.on("uncaughtException", err => console.error("[orchestrator] uncaught exception (kept alive):", err?.message || err));
 const app = express();
@@ -152,8 +200,8 @@ app.post("/missions", internalAuth, (req, res) => {
     queued: queue.length
   });
 });
-app.post("/missions/:id/clarify", internalAuth, (req, res) => {
-  const m = missions.get(req.params.id);
+app.post("/missions/:id/clarify", internalAuth, async (req, res) => {
+  const m = await getMission(req.params.id);
   if (!m || m.userEmail !== userOf(req)) return res.status(404).json({
     error: "not found"
   });
@@ -175,8 +223,8 @@ app.post("/missions/:id/clarify", internalAuth, (req, res) => {
     status: m.status
   });
 });
-app.post("/missions/:id/steer", internalAuth, (req, res) => {
-  const m = missions.get(req.params.id);
+app.post("/missions/:id/steer", internalAuth, async (req, res) => {
+  const m = await getMission(req.params.id);
   if (!m || m.userEmail !== userOf(req)) return res.status(404).json({
     error: "not found"
   });
@@ -211,9 +259,10 @@ setInterval(() => {
       briefingStore.add({ id: `b_${m.id}`, missionId: m.id, kind: "cancelled", title: `Expired — no answer: ${m.title}`, severity: "info", auto: !!m.auto, userEmail: m.userEmail || null, at: now });
     }
   }
+  enforceMissionCap();
 }, 300_000).unref();
-app.post("/missions/:id/cancel", internalAuth, (req, res) => {
-  const m = missions.get(req.params.id);
+app.post("/missions/:id/cancel", internalAuth, async (req, res) => {
+  const m = await getMission(req.params.id);
   if (!m || m.userEmail !== userOf(req)) return res.status(404).json({
     error: "not found"
   });
@@ -231,13 +280,14 @@ app.post("/missions/:id/cancel", internalAuth, (req, res) => {
     m.status = "cancelled";
     emit(m.id, "mission.cancelled", {});
     missionStore.save(m);
+    enforceMissionCap();
   }
   res.json({
     ok: true
   });
 });
 app.post("/missions/:id/bus", internalAuth, async (req, res) => {
-  const m = missions.get(req.params.id);
+  const m = await getMission(req.params.id);
   if (!m) return res.status(404).json({ error: "mission not found" });
   const reqUser = userOf(req);
   if ((m.userEmail || null) !== (reqUser || null)) return res.status(403).json({ error: "forbidden" });
@@ -343,8 +393,8 @@ app.post("/missions/:id/bus", internalAuth, async (req, res) => {
   }
   return res.json({ error: `unknown bus kind "${kind}"` });
 });
-app.post("/missions/:id/approve", internalAuth, (req, res) => {
-  const m = missions.get(req.params.id);
+app.post("/missions/:id/approve", internalAuth, async (req, res) => {
+  const m = await getMission(req.params.id);
   if (!m || m.userEmail !== userOf(req)) return res.status(404).json({ error: "not found" });
   const approvalId = String(req.body?.approvalId || "");
   const decision = req.body?.decision === "allow" ? "allow" : "deny";
@@ -354,17 +404,24 @@ app.post("/missions/:id/approve", internalAuth, (req, res) => {
   p.resolve(decision);
   res.json({ ok: true, decision });
 });
-app.get("/missions", internalAuth, (req, res) => {
+const missionListShape = m => ({
+  id: m.id,
+  title: m.title,
+  status: m.status,
+  createdAt: m.createdAt,
+  decision: m.decision || m.meeting?.decision || null,
+  recommendation: m.report?.recommendation || null,
+  confidence: m.report?.confidence ?? null
+});
+app.get("/missions", internalAuth, async (req, res) => {
   const u = userOf(req);
-  res.json([...missions.values()].filter(m => m.userEmail === u).sort((a, b) => b.createdAt - a.createdAt).map(m => ({
-    id: m.id,
-    title: m.title,
-    status: m.status,
-    createdAt: m.createdAt,
-    decision: m.decision || m.meeting?.decision || null,
-    recommendation: m.report?.recommendation || null,
-    confidence: m.report?.confidence ?? null
-  })));
+  const rows = missionStore.available() ? await missionStore.listForUser(u, 100) : null;
+  if (rows) {
+    const byId = new Map(rows.map(r => [r.id, r]));
+    for (const m of missions.values()) if (m.userEmail === u) byId.set(m.id, missionListShape(m));
+    return res.json([...byId.values()].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 100));
+  }
+  res.json([...missions.values()].filter(m => m.userEmail === u).sort((a, b) => b.createdAt - a.createdAt).map(missionListShape));
 });
 app.get("/missions/briefings", internalAuth, async (req, res) => {
   const list = await briefingStore.list(userOf(req), 40);
@@ -411,7 +468,7 @@ app.get("/calibration/stats", internalAuth, async (req, res) => {
 });
 app.post("/missions/:id/outcome", internalAuth, async (req, res) => {
   const u = userOf(req);
-  const m = missions.get(req.params.id);
+  const m = await getMission(req.params.id);
   if (!m || m.userEmail !== u) return res.status(404).json({
     error: "not found"
   });
@@ -424,15 +481,15 @@ app.post("/missions/:id/outcome", internalAuth, async (req, res) => {
   await calibrationStore.setOutcome(m.id, u, value);
   res.json({ ok: true, outcome: value });
 });
-app.get("/missions/:id", internalAuth, (req, res) => {
-  const m = missions.get(req.params.id);
+app.get("/missions/:id", internalAuth, async (req, res) => {
+  const m = await getMission(req.params.id);
   if (!m || m.userEmail !== userOf(req)) return res.status(404).json({
     error: "not found"
   });
   res.json(m);
 });
 app.get("/missions/:id/events", internalAuth, async (req, res) => {
-  const m = missions.get(req.params.id);
+  const m = await getMission(req.params.id);
   if (!m || m.userEmail !== userOf(req)) return res.status(404).json({
     error: "not found"
   });
@@ -517,6 +574,12 @@ setInterval(async () => {
     console.warn(`[orchestrator] scheduler tick failed (${err.message})`);
   }
 }, SCHED_MS);
+const mb = v => Math.round(v / 1048576);
+console.log(`[orchestrator] boot rss=${mb(process.memoryUsage().rss)}MB`);
+setInterval(() => {
+  const mu = process.memoryUsage();
+  if (mb(mu.rss) > 700) console.log(`[orchestrator] rss=${mb(mu.rss)}MB heapUsed=${mb(mu.heapUsed)}MB`);
+}, 300_000).unref();
 const server = http.createServer(app);
 attach(server);
 server.listen(PORT, () => console.log(`[orchestrator] listening on :${PORT}`));

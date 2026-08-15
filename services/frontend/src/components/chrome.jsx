@@ -10,16 +10,20 @@ export const DSIcon = DS.Icon || (({
 }) => <span>{name}</span>);
 const LG = DS.LiquidGlass;
 const LGDock = DS.GlassDock;
+export const LENS = typeof CSS !== "undefined" && CSS.supports("backdrop-filter", "url(#lg) blur(2px)");
+export const ThemeCtx = React.createContext("light");
+export const useTheme = () => React.useContext(ThemeCtx);
 export function GlassPanel({
   side,
   label,
   wide,
   children
 }) {
+  const theme = useTheme();
   const cls = "as-panel-host " + side + (wide ? " wide" : "");
   const inner = <div className="as-panel" role="dialog" aria-modal="false" aria-label={label}>{children}</div>;
   if (!LG) return <div className={cls}>{inner}</div>;
-  return <LG className={cls} radius={20} intensity="heavy" hoverLift={false} refraction={false}>
+  return <LG className={cls} radius={24} intensity="heavy" hoverLift={false} refraction={LENS} theme={theme}>
       {inner}
     </LG>;
 }
@@ -71,15 +75,20 @@ export function StatusDot({
       {AS.STR.status[state] || AS.STR.status.idle}
     </span>;
 }
+const SunIcon = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>;
+const MoonIcon = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>;
 export function TopBar({
   clock,
   worldName,
   onlineCount,
   connected,
   onSetup,
+  onTheme,
   user,
   onLogout
 }) {
+  const theme = useTheme();
+  const T = AS.STR.theme;
   const left = <div className="as-topbar">
       <div className="as-brand">
         <img className="as-brand-logo" src="/assets/greennode-logo.png" alt="GreenNode" />
@@ -98,6 +107,9 @@ export function TopBar({
         <DSIcon name="clock" size={14} />
         {clock}
       </div>
+      {onTheme && <button className="as-icon-btn" onClick={onTheme} title={theme === "dark" ? T.toLight : T.toDark} aria-label={theme === "dark" ? T.toLight : T.toDark}>
+          {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+        </button>}
       {onSetup && <button className="as-icon-btn" onClick={onSetup} title="Squad setup — agent names & models">
           <DSIcon name="settings" size={15} />
         </button>}
@@ -110,8 +122,8 @@ export function TopBar({
       </React.Fragment>;
   }
   return <React.Fragment>
-      <LG className="as-tb-left" radius={999} hoverLift={false} refraction={false}>{left}</LG>
-      <LG className="as-tb-right" radius={999} hoverLift={false} refraction={false}>{right}</LG>
+      <LG className="as-tb-left" radius={999} hoverLift={false} refraction={LENS} theme={theme}>{left}</LG>
+      <LG className="as-tb-right" radius={999} hoverLift={false} refraction={LENS} theme={theme}>{right}</LG>
     </React.Fragment>;
 }
 export function Dock({
@@ -210,9 +222,29 @@ export function Dock({
         {AS.STR.dock.mission}
       </button>
     </React.Fragment>;
+  const theme = useTheme();
   return <div className="as-dock-wrap" ref={wrapRef}>
-      {LGDock ? <LGDock refraction={false} springPress={false}>{buttons}</LGDock> : <div className="as-dock">{buttons}</div>}
+      {LGDock ? <LGDock refraction={LENS} springPress={true} theme={theme}>{buttons}</LGDock> : <div className="as-dock">{buttons}</div>}
     </div>;
+}
+export function FirstRunGuide({
+  onChip,
+  onDismiss
+}) {
+  const theme = useTheme();
+  const G = AS.STR.guide;
+  const inner = <div className="as-guide" role="dialog" aria-label={G.title}>
+      <button className="as-icon-btn as-guide-close" onClick={onDismiss} aria-label={AS.STR.panel.close}><DSIcon name="x" size={14} /></button>
+      <div className="as-guide-title"><DSIcon name="check-circle" size={15} />{G.title}</div>
+      <div className="as-guide-line">{G.line}</div>
+      <div className="as-guide-chips">
+        {G.examples.map(ex => <button key={ex} className="as-chip click" onClick={() => onChip(ex)}>{ex}</button>)}
+      </div>
+    </div>;
+  if (!LG) return <div className="as-guide-host">{inner}</div>;
+  return <LG className="as-guide-host" radius={22} intensity="heavy" hoverLift={false} refraction={LENS} theme={theme}>
+      {inner}
+    </LG>;
 }
 export function ZoomControls({
   onZoom
@@ -543,8 +575,9 @@ export function Login({
       {backBtn}
     </div>;
   const card = step === 0 ? emailCard : enroll ? enrollCard : codeCard;
+  const theme = useTheme();
   return <div className="as-login-backdrop">
-      {LG ? <LG className="as-login-host" radius={26} intensity="heavy" hoverLift={false} refraction={false}>
+      {LG ? <LG className="as-login-host" radius={28} intensity="heavy" hoverLift={false} refraction={LENS} theme={theme}>
           {card}
         </LG> : <div className="as-login-host">{card}</div>}
     </div>;
@@ -562,6 +595,7 @@ export function Onboarding({
   user,
   onLogout
 }) {
+  const theme = useTheme();
   const [creating, setCreating] = React.useState(false);
   const [models, setModels] = React.useState(AS.MODELS);
   const [modelSource, setModelSource] = React.useState(null);
@@ -661,11 +695,11 @@ export function Onboarding({
       <input className="as-input as-input-sm" value={a.mandate || ""} placeholder="e.g. only trust official VN sources; always flag legal risk…" onChange={e => setAgentMandate(a.id, e.target.value)} aria-label="mandate" />
     </div>;
   return <div className="as-onb-backdrop">
-      {LG ? <LG className="as-onb-host" radius={24} intensity="heavy" hoverLift={false} refraction={false}>
+      {LG ? <LG className="as-onb-host" radius={28} intensity="heavy" hoverLift={false} refraction={LENS} theme={theme}>
           <div className="as-onb" role="dialog" aria-modal="true" aria-label={O.setupTitle}>
             <div className="as-onb-header">
               {returning ? <React.Fragment>
-                  {LG ? <LG className="as-onb-back" radius={999} hoverLift={true} refraction={false}>
+                  {LG ? <LG className="as-onb-back" radius={999} hoverLift={true} refraction={LENS} theme={theme}>
                       <button className="as-onb-back-btn" onClick={onCancel} aria-label="Back"><DSIcon name="arrow-right" size={18} /></button>
                     </LG> : <button className="as-onb-close" onClick={onCancel} aria-label="Back"><DSIcon name="arrow-right" size={18} /></button>}
                   <img src="/assets/greennode-logo.png" alt="GreenNode" className="as-onb-logo" />
@@ -683,7 +717,8 @@ export function Onboarding({
             <div>
               <h1>{O.setupTitle}</h1>
               <p className="lead">{O.squadDesc}</p>
-              {modelSource && <div className="as-onb-source">{modelSource === "maas" ? O.modelsLive : O.modelsFallback}</div>}
+              <div className="as-onb-tip">{O.leadTip}</div>
+              {modelSource && <div className="as-onb-source">{modelSource === "maas" ? O.modelsLive : modelSource === "maas-cache" ? O.modelsCached : modelSource === "maas-catalog" ? O.modelsCatalog : O.modelsFallback}</div>}
               <div className="as-onb-squad">
                 {squad.map(agentCard)}
               </div>
@@ -691,9 +726,9 @@ export function Onboarding({
               <div className="as-onb-foot" style={{
             justifyContent: "flex-end"
           }}>
-                {(!returning || dirty) && <button className="as-btn primary" onClick={create} disabled={creating}>
-                    {creating ? returning ? O.saving : O.createdSquad : returning ? O.save : O.enter}
-                  </button>}
+                <button className="as-btn primary" onClick={create} disabled={creating || returning && !dirty}>
+                  {creating ? returning ? O.saving : O.createdSquad : returning ? O.save : O.enter}
+                </button>
               </div>
               <div className="as-disclaimer">{AS.STR.misc.disclaimer}</div>
             </div>

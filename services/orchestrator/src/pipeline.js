@@ -635,16 +635,16 @@ export async function runMission(mission, { signal } = {}) {
         summary: o.summary,
         keyPoints: o.keyPoints,
         lesson: vi
-          ? `Nhiệm vụ “${m.title}”: bạn phụ trách “${o.focus}”, kết luận ${o.stance} (${o.confidence}%); cả đội chốt ${decision}.`
-          : `Mission “${m.title}”: you owned “${o.focus}”, concluded ${o.stance} (${o.confidence}%); the squad decided ${decision}.`
+          ? `Nhiệm vụ “${m.title}”: bạn phụ trách “${o.focus}”, kết luận ${o.stance || "chưa rõ"} (${o.confidence}%); cả đội chốt ${decision || "chưa đủ dữ liệu để kết luận"}.`
+          : `Mission “${m.title}”: you owned “${o.focus}”, concluded ${o.stance || "no clear stance"} (${o.confidence}%); the squad decided ${decision || "insufficient data to conclude"}.`
       }));
       outcomes.push({
         agentId: lead.id,
         focus: "orchestration",
         title: m.title,
         lesson: vi
-          ? `Nhiệm vụ “${m.title}”: bạn điều phối ${m.phases.length} giai đoạn, tổng hợp và chốt ${decision} (độ tin cậy ${m.report.confidence}%).`
-          : `Mission “${m.title}”: you orchestrated ${m.phases.length} phase(s), synthesized and concluded ${decision} (confidence ${m.report.confidence}%).`
+          ? `Nhiệm vụ “${m.title}”: bạn điều phối ${m.phases.length} giai đoạn, tổng hợp và chốt ${decision || "chưa đủ dữ liệu để kết luận"} (độ tin cậy ${m.report.confidence}%).`
+          : `Mission “${m.title}”: you orchestrated ${m.phases.length} phase(s), synthesized and concluded ${decision || "insufficient data to conclude"} (confidence ${m.report.confidence}%).`
       });
       await rt("/memory/commit", { missionId: m.id, outcomes, userEmail: m.userEmail || null });
     } catch {}

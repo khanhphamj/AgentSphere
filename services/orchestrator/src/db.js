@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS mission_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (mission_id, seq)
 );
-CREATE INDEX IF NOT EXISTS mission_events_mid ON mission_events (mission_id, seq)`;
+CREATE INDEX IF NOT EXISTS mission_events_mid ON mission_events (mission_id, seq);
+CREATE INDEX IF NOT EXISTS missions_user_updated ON missions ((data->>'userEmail'), updated_at DESC)`;
 
 let pool = null;
 let ready = null;
@@ -66,14 +67,59 @@ function init() {
 }
 
 const pgJson = v => JSON.stringify(v).replace(/\\u0000/g, "");
+const TERMINAL_SQL = "('done','failed','cancelled')";
 export const missionStore = {
-  async loadAll() {
+  available: () => ready !== null && !degraded,
+  async loadBoot(recentLimit = 100) {
     if (!(await init())) return [];
     try {
-      return (await pool.query("SELECT data FROM missions ORDER BY (data->>'createdAt')::bigint")).rows.map(r => r.data);
+      const active = await pool.query(`SELECT data FROM missions WHERE COALESCE(data->>'status','') NOT IN ${TERMINAL_SQL}`);
+      const recent = await pool.query(`SELECT data FROM missions WHERE data->>'status' IN ${TERMINAL_SQL} AND COALESCE(data->>'userEmail','') <> '' ORDER BY updated_at DESC LIMIT $1`, [recentLimit]);
+      const seen = new Set();
+      const rows = [];
+      for (const r of [...recent.rows.reverse(), ...active.rows]) {
+        if (!r.data?.id || seen.has(r.data.id)) continue;
+        seen.add(r.data.id);
+        rows.push(r.data);
+      }
+      return rows;
+    } catch (err) {
+      console.warn(`[orchestrator] mission boot load failed (${err.message})`);
+      return [];
+    }
+  },
+  async loadOne(id) {
+    if (!id || !(await init())) return null;
+    try {
+      return (await pool.query("SELECT data FROM missions WHERE id = $1", [id])).rows[0]?.data || null;
     } catch (err) {
       console.warn(`[orchestrator] mission load failed (${err.message})`);
-      return [];
+      return null;
+    }
+  },
+  async listForUser(email, limit = 100) {
+    if (!(await init())) return null;
+    try {
+      const r = await pool.query(
+        "SELECT data->>'id' AS id, data->>'title' AS title, data->>'status' AS status, data->>'createdAt' AS created_at, data->>'decision' AS decision, data#>>'{meeting,decision}' AS meeting_decision, data#>>'{report,recommendation}' AS recommendation, data#>>'{report,confidence}' AS confidence FROM missions WHERE data->>'userEmail' = $1 ORDER BY updated_at DESC LIMIT $2",
+        [email || "", limit]
+      );
+      return r.rows.map(x => {
+        const createdAt = x.created_at == null ? NaN : Number(x.created_at);
+        const confidence = x.confidence == null || x.confidence === "" ? NaN : Number(x.confidence);
+        return {
+          id: x.id,
+          title: x.title,
+          status: x.status,
+          createdAt: Number.isFinite(createdAt) ? createdAt : null,
+          decision: x.decision || x.meeting_decision || null,
+          recommendation: x.recommendation || null,
+          confidence: Number.isFinite(confidence) ? confidence : null
+        };
+      });
+    } catch (err) {
+      console.warn(`[orchestrator] mission list failed (${err.message})`);
+      return null;
     }
   },
   async save(mission) {
@@ -119,6 +165,16 @@ export const eventStore = {
     } catch (err) {
       console.warn(`[orchestrator] event list failed (${err.message})`);
       return [];
+    }
+  },
+  async prune(days = 30) {
+    if (!(await init())) return 0;
+    try {
+      const r = await pool.query("DELETE FROM mission_events WHERE created_at < now() - make_interval(days => $1::int)", [days]);
+      return r.rowCount || 0;
+    } catch (err) {
+      console.warn(`[orchestrator] event prune failed (${err.message})`);
+      return 0;
     }
   }
 };

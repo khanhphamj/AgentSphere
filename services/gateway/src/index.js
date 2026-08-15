@@ -227,6 +227,12 @@ app.use((err, _req, res, _next) => {
   console.warn(`[gateway] request error: ${err?.message || err}`);
   res.status(err?.status || err?.statusCode || 500).json({ error: "internal error" });
 });
+const mb = v => Math.round(v / 1048576);
+console.log(`[gateway] boot rss=${mb(process.memoryUsage().rss)}MB`);
+setInterval(() => {
+  const mu = process.memoryUsage();
+  if (mb(mu.rss) > 700) console.log(`[gateway] rss=${mb(mu.rss)}MB heapUsed=${mb(mu.heapUsed)}MB`);
+}, 300_000).unref();
 const server = app.listen(PORT, () => console.log(`[gateway] listening on :${PORT} → orchestrator ${ORCHESTRATOR_URL}, policy ${MCP_POLICY_URL}`));
 server.on("upgrade", (req, socket, head) => {
   if (!req.url || !req.url.startsWith("/ws")) {

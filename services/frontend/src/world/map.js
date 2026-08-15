@@ -44,7 +44,7 @@ const ASMap = (() => {
       y0: 12,
       x1: 22,
       y1: 22,
-      roof: "#C8D2CC",
+      roof: "#4F7FD0",
       name: "office",
       solar: true,
       rows: 1
@@ -54,7 +54,7 @@ const ASMap = (() => {
       y0: 4,
       x1: 49,
       y1: 7,
-      roof: "#8FA8CE",
+      roof: "#6E96D8",
       name: "lab",
       solar: true,
       rows: 1
@@ -64,7 +64,7 @@ const ASMap = (() => {
       y0: 4,
       x1: 32,
       y1: 9,
-      roof: "#C9A07E",
+      roof: "#C8894E",
       name: "library",
       solar: false,
       rows: 2
@@ -74,7 +74,7 @@ const ASMap = (() => {
       y0: 24,
       x1: 49,
       y1: 30,
-      roof: "#D8A4B8",
+      roof: "#D8809C",
       name: "cafe",
       solar: false,
       rows: 0
@@ -84,7 +84,7 @@ const ASMap = (() => {
       y0: 15,
       x1: 58,
       y1: 15,
-      roof: "#C9A07E",
+      roof: "#C8894E",
       name: "wing",
       solar: false,
       rows: 1
@@ -345,243 +345,281 @@ const ASMap = (() => {
       case HEDGE:
         {
           const band = (x + ((y / 3) | 0)) / 3 % 2 | 0;
-          px(ctx, X, Y, T, T, band ? n > 0.5 ? "#8FCA83" : "#8BC67F" : n > 0.5 ? "#89C57D" : "#86C17A");
-          if (hash(x + 9, y + 4) > 0.72) px(ctx, X + (n * 11 | 0) % 12 + 2, Y + (n * 23 | 0) % 12 + 2, 2, 2, "#78BA70");
-          if (hash(x + 5, y + 8) > 0.85) px(ctx, X + (n * 31 | 0) % 13 + 1, Y + (n * 17 | 0) % 13 + 1, 1, 2, "#A4DC96");
+          px(ctx, X, Y, T, T, band ? n > 0.5 ? "#6FB44C" : "#6BB048" : n > 0.5 ? "#68AC46" : "#65A843");
+          if (hash(x + 9, y + 4) > 0.7) {
+            const tx2 = X + (n * 11 | 0) % 11 + 2,
+              ty2 = Y + (n * 23 | 0) % 11 + 3;
+            px(ctx, tx2, ty2, 3, 1, "#4E9138");
+            px(ctx, tx2 + 1, ty2 - 1, 1, 1, "#4E9138");
+          }
+          if (hash(x + 2, y + 12) > 0.8) px(ctx, X + (n * 29 | 0) % 12 + 2, Y + (n * 13 | 0) % 12 + 2, 2, 1, "#57A03E");
+          if (hash(x + 5, y + 8) > 0.86) {
+            const bx2 = X + (n * 31 | 0) % 13 + 1,
+              by2 = Y + (n * 17 | 0) % 13 + 1;
+            px(ctx, bx2, by2, 1, 2, "#A6DC7E");
+            px(ctx, bx2 + 1, by2 + 1, 1, 1, "#8CCB6D");
+          }
           if (t === GRASS && hash(x + 3, y + 7) > 0.92) {
             const fx = X + (n * 13 | 0) % 10 + 3,
               fy = Y + (n * 7 | 0) % 8 + 4;
-            px(ctx, fx, fy + 2, 1, 2, "#5E9E63");
-            px(ctx, fx - 1, fy, 3, 2, n > 0.6 ? "#F2D06B" : n > 0.3 ? "#EF9BB1" : "#F4F1E6");
+            px(ctx, fx, fy + 2, 1, 2, "#3F8A34");
+            px(ctx, fx - 1, fy, 3, 2, n > 0.6 ? "#F2D06B" : n > 0.3 ? "#F2A6C6" : "#F8F6EC");
+            px(ctx, fx, fy, 1, 1, n > 0.6 ? "#FFE9A0" : n > 0.3 ? "#FFCFE0" : "#FFFFFF");
           }
           break;
         }
       case ATRIUM:
         {
           const sky = (x + y) % 9 < 2;
-          px(ctx, X, Y, T, T, sky ? n > 0.5 ? "#EDF4FA" : "#E8F0F7" : n > 0.5 ? "#DCE9F2" : "#D5E3ED");
-          if (x % 2 === 0) px(ctx, X, Y, 1, T, "#C4D5E2");
-          if (y % 2 === 0) px(ctx, X, Y, T, 1, "#C4D5E2");
-          if (hash(x + 6, y + 11) > 0.9) px(ctx, X + (n * 13 | 0) % 11 + 2, Y + (n * 29 | 0) % 11 + 2, 2, 1, "#F6FAFD");
-          ao(ctx, x, y, "#B5C1CB");
+          const chk = (x + y) % 2;
+          px(ctx, X, Y, T, T, sky ? chk ? "#E7EFF6" : "#E2EAF2" : chk ? "#DDE5EE" : "#D8E0E9");
+          if (x % 2 === 0) px(ctx, X, Y, 1, T, "#BFCDDC");
+          if (y % 2 === 0) px(ctx, X, Y, T, 1, "#BFCDDC");
+          if (hash(x + 6, y + 11) > 0.9) px(ctx, X + (n * 13 | 0) % 11 + 2, Y + (n * 29 | 0) % 11 + 2, 2, 1, "#F8FBFE");
+          ao(ctx, x, y, "#B2BDD2");
           break;
         }
       case LOBBY:
         {
-          px(ctx, X, Y, T, T, n > 0.5 ? "#4A4F55" : "#464B51");
-          if (x % 2 === 0) px(ctx, X, Y, 1, T, "#3A3E44");
-          if (y % 2 === 0) px(ctx, X, Y, T, 1, "#3A3E44");
-          if (hash(x + 8, y + 5) > 0.88) px(ctx, X + (n * 17 | 0) % 11 + 2, Y + (n * 23 | 0) % 11 + 2, 2, 1, "#5A6068");
+          const chk = (x + y) % 2;
+          px(ctx, X, Y, T, T, chk ? n > 0.5 ? "#4C525E" : "#495059" : n > 0.5 ? "#474D57" : "#444A54");
+          if (x % 2 === 0) px(ctx, X, Y, 1, T, "#3A404C");
+          if (y % 2 === 0) px(ctx, X, Y, T, 1, "#3A404C");
+          if (hash(x + 8, y + 5) > 0.88) px(ctx, X + (n * 17 | 0) % 11 + 2, Y + (n * 23 | 0) % 11 + 2, 2, 1, "#5C6472");
           if (y >= 28 && x >= 42 && x <= 47) {
-            px(ctx, X + 4, Y, 1, T, "#585E66");
-            px(ctx, X + 11, Y, 1, T, "#565C63");
+            px(ctx, X + 4, Y, 1, T, "#5A6270");
+            px(ctx, X + 11, Y, 1, T, "#586070");
           }
-          ao(ctx, x, y, "#3B3F44");
+          ao(ctx, x, y, "#343A46");
           break;
         }
       case SLAT:
         {
-          px(ctx, X, Y, T, T, "#F4F7FA");
-          px(ctx, X + 3, Y, 1, T, "#C9D2D8");
-          px(ctx, X + 7, Y, 1, T, "#C9D2D8");
-          px(ctx, X + 11, Y, 1, T, "#C9D2D8");
-          px(ctx, X + 15, Y, 1, T, "#C9D2D8");
-          px(ctx, X, Y, T, 1, "#9DB0C0");
-          px(ctx, X, Y + T - 2, T, 1, "#DDE5EA");
-          px(ctx, X, Y + T - 1, T, 1, "#B4C2CC");
+          px(ctx, X, Y, T, T, "#EFEAD9");
+          px(ctx, X + 3, Y, 1, T, "#D3C9B0");
+          px(ctx, X + 7, Y, 1, T, "#D3C9B0");
+          px(ctx, X + 11, Y, 1, T, "#D3C9B0");
+          px(ctx, X + 15, Y, 1, T, "#D3C9B0");
+          px(ctx, X, Y, T, 1, "#9AA4BC");
+          px(ctx, X, Y + T - 2, T, 1, "#E2E2DC");
+          px(ctx, X, Y + T - 1, T, 1, "#B2B8C6");
           break;
         }
       case PARK:
         {
           const grassy = v => v === GRASS || v === FLOWER || v === TREE || v === HEDGE;
-          px(ctx, X, Y, T, T, n > 0.5 ? "#6C7077" : "#676B72");
-          if (grassy(g(x, y - 1))) px(ctx, X, Y, T, 1, "#D8D2C4");else if (g(x, y - 1) !== PARK) px(ctx, X, Y, T, 1, "#5A5E64");
-          if (grassy(g(x - 1, y))) px(ctx, X, Y, 1, T, "#D8D2C4");else if (g(x - 1, y) !== PARK) px(ctx, X, Y, 1, T, "#5A5E64");
-          if (grassy(g(x + 1, y))) px(ctx, X + T - 1, Y, 1, T, "#D8D2C4");
-          if (grassy(g(x, y + 1))) px(ctx, X, Y + T - 1, T, 1, "#D8D2C4");
-          if (hash(x + 5, y + 3) > 0.82) px(ctx, X + (n * 19 | 0) % 12 + 2, Y + (n * 11 | 0) % 12 + 2, 2, 1, "#5A5E64");
+          const chk = (x + y) % 2;
+          px(ctx, X, Y, T, T, chk ? n > 0.5 ? "#9A948A" : "#968F85" : n > 0.5 ? "#928C82" : "#8E887E");
+          px(ctx, X + 5 + (n * 5 | 0) % 4, Y + 2 + (n * 7 | 0) % 3, 1, 5, "#7E786E");
+          px(ctx, X + 2, Y + 8, 5, 1, "#7E786E");
+          px(ctx, X + 10, Y + 11 + (n * 3 | 0) % 2, 4, 1, "#7E786E");
+          px(ctx, X + 3 + (n * 9 | 0) % 3, Y + 3, 2, 1, "#B4AEA2");
+          if (hash(x + 5, y + 3) > 0.82) px(ctx, X + (n * 19 | 0) % 12 + 2, Y + (n * 11 | 0) % 12 + 2, 2, 1, "#78726A");
+          if (grassy(g(x, y - 1))) px(ctx, X, Y, T, 1, "#D8D2C0");else if (g(x, y - 1) !== PARK) px(ctx, X, Y, T, 1, "#6E6860");
+          if (grassy(g(x - 1, y))) px(ctx, X, Y, 1, T, "#D8D2C0");else if (g(x - 1, y) !== PARK) px(ctx, X, Y, 1, T, "#6E6860");
+          if (grassy(g(x + 1, y))) px(ctx, X + T - 1, Y, 1, T, "#D8D2C0");
+          if (grassy(g(x, y + 1))) px(ctx, X, Y + T - 1, T, 1, "#D8D2C0");
           if (x % 3 === 1) {
-            px(ctx, X, Y + 2, 2, 5, "#E8ECEF");
-            px(ctx, X, Y + 9, 2, 5, "#E8ECEF");
+            px(ctx, X, Y + 2, 2, 5, "#EEF0EA");
+            px(ctx, X, Y + 9, 2, 5, "#EEF0EA");
           }
           break;
         }
       case CORR:
         {
-          px(ctx, X, Y, T, T, n > 0.5 ? "#EFEAE0" : "#EAE5DA");
-          px(ctx, X, Y + T - 1, T, 1, "#DED7C9");
-          px(ctx, X + T - 1, Y, 1, T, "#DED7C9");
-          if (hash(x + 3, y + 9) > 0.9) px(ctx, X + (n * 11 | 0) % 12 + 2, Y + (n * 7 | 0) % 12 + 2, 2, 1, "#DED7C9");
-          ao(ctx, x, y, "#C4C0B8");
+          const chk = (x + y) % 2;
+          px(ctx, X, Y, T, T, chk ? n > 0.5 ? "#EAE3D2" : "#E7E0CE" : n > 0.5 ? "#E4DDCA" : "#E1D9C5");
+          px(ctx, X, Y + T - 1, T, 1, "#CFC7B2");
+          px(ctx, X + T - 1, Y, 1, T, "#CFC7B2");
+          if (hash(x + 3, y + 9) > 0.9) px(ctx, X + (n * 11 | 0) % 12 + 2, Y + (n * 7 | 0) % 12 + 2, 2, 1, "#D2CAB5");
+          ao(ctx, x, y, "#B4AC9A");
           break;
         }
       case COURT:
         {
-          px(ctx, X, Y, T, T, n > 0.5 ? "#D98E54" : "#D3884E");
-          if (hash(x + 3, y + 5) > 0.8) px(ctx, X + (n * 17 | 0) % 13 + 1, Y + (n * 11 | 0) % 13 + 1, 2, 1, "#C77F47");
+          px(ctx, X, Y, T, T, n > 0.5 ? "#D28A4E" : "#CC8448");
+          if (hash(x + 3, y + 5) > 0.78) px(ctx, X + (n * 17 | 0) % 13 + 1, Y + (n * 11 | 0) % 13 + 1, 2, 1, "#B9713C");
+          if (hash(x + 8, y + 2) > 0.9) px(ctx, X + (n * 7 | 0) % 13 + 1, Y + (n * 23 | 0) % 13 + 1, 1, 1, "#E2A468");
           break;
         }
       case PATH:
         {
-          px(ctx, X, Y, T, T, n > 0.5 ? "#D9CDB4" : "#D2C6AC");
-          if (hash(x + 2, y + 6) > 0.7) px(ctx, X + (n * 13 | 0) % 12 + 2, Y + (n * 29 | 0) % 12 + 2, 2, 1, "#C4B79B");
-          if (g(x, y - 1) !== PATH && g(x, y - 1) !== DOOR && g(x, y - 1) !== SAND) px(ctx, X, Y, T, 1, "#BFB298");
+          px(ctx, X, Y, T, T, n > 0.5 ? "#C9AC7E" : "#C3A676");
+          if (hash(x + 2, y + 6) > 0.68) px(ctx, X + (n * 13 | 0) % 12 + 2, Y + (n * 29 | 0) % 12 + 2, 2, 1, "#A98B62");
+          if (hash(x + 7, y + 1) > 0.86) px(ctx, X + (n * 23 | 0) % 12 + 2, Y + (n * 5 | 0) % 12 + 2, 1, 1, "#DCC392");
+          if (g(x, y - 1) !== PATH && g(x, y - 1) !== DOOR && g(x, y - 1) !== SAND) {
+            px(ctx, X, Y, T, 1, "#8A6D4C");
+            px(ctx, X, Y + 1, T, 1, "#DCC392");
+          }
+          if (g(x, y + 1) !== PATH && g(x, y + 1) !== DOOR && g(x, y + 1) !== SAND) px(ctx, X, Y + T - 1, T, 1, "#A9906A");
           break;
         }
       case PLAZA:
         {
-          px(ctx, X, Y, T, T, n > 0.5 ? "#DDD4C2" : "#D6CDBA");
-          px(ctx, X, Y, T, 1, "#C8BFAB");
-          px(ctx, X, Y, 1, T, "#CDC4B0");
-          if (hash(x + 4, y + 9) > 0.84) px(ctx, X + (n * 19 | 0) % 12 + 2, Y + (n * 7 | 0) % 12 + 2, 2, 1, "#C8BFAB");
+          px(ctx, X, Y, T, T, (x + y) % 2 ? "#9A948A" : "#948E84");
+          px(ctx, X, Y, T, 1, "#7E786E");
+          px(ctx, X, Y, 1, T, "#867F76");
+          if (hash(x + 4, y + 9) > 0.84) px(ctx, X + (n * 19 | 0) % 12 + 2, Y + (n * 7 | 0) % 12 + 2, 2, 1, "#B4AEA2");
           break;
         }
       case DECK:
         {
-          px(ctx, X, Y, T, T, n > 0.5 ? "#C49A6C" : "#BE9466");
-          px(ctx, X, Y + 3, T, 1, "#AC8458");
-          px(ctx, X, Y + 8, T, 1, "#AC8458");
-          px(ctx, X, Y + 13, T, 1, "#AC8458");
+          px(ctx, X, Y, T, T, n > 0.5 ? "#C09468" : "#BA8E62");
+          px(ctx, X, Y + 3, T, 1, "#94704A");
+          px(ctx, X, Y + 8, T, 1, "#94704A");
+          px(ctx, X, Y + 13, T, 1, "#94704A");
+          px(ctx, X, Y + 4, T, 1, "#D8B27E");
+          px(ctx, X, Y + 9, T, 1, "#D2AC78");
+          if (hash(x + 4, y + 6) > 0.88) px(ctx, X + (n * 13 | 0) % 13 + 1, Y + 5, 1, 1, "#7A5A3C");
           break;
         }
       case SAND:
         {
-          px(ctx, X, Y, T, T, n > 0.5 ? "#E3D9BE" : "#DDD2B5");
-          if (hash(x + 1, y + 3) > 0.75) px(ctx, X + (n * 19 | 0) % 13 + 1, Y + (n * 7 | 0) % 13 + 1, 1, 1, "#CEC2A3");
+          px(ctx, X, Y, T, T, n > 0.5 ? "#E8DCB2" : "#E2D6AA");
+          if (hash(x + 1, y + 3) > 0.72) px(ctx, X + (n * 19 | 0) % 13 + 1, Y + (n * 7 | 0) % 13 + 1, 2, 1, "#C9BC8E");
+          if (hash(x + 6, y + 9) > 0.9) px(ctx, X + (n * 11 | 0) % 13 + 1, Y + (n * 27 | 0) % 13 + 1, 1, 1, "#F6EED2");
           break;
         }
       case WATER:
         {
-          px(ctx, X, Y, T, T, "#5FAAD0");
-          if (hash(x + 4, y + 1) > 0.55) px(ctx, X + (n * 9 | 0) % 10 + 2, Y + (n * 27 | 0) % 10 + 2, 5, 1, "#90CDE8");
-          if (hash(x + 11, y + 6) > 0.62) px(ctx, X + (n * 17 | 0) % 9 + 3, Y + (n * 13 | 0) % 9 + 4, 4, 1, "#4E97BE");
-          if (hash(x + 13, y + 9) > 0.9) px(ctx, X + (n * 23 | 0) % 11 + 2, Y + (n * 29 | 0) % 11 + 2, 2, 1, "#F4FCFF");
+          px(ctx, X, Y, T, T, "#3F93D6");
+          if (hash(x + 4, y + 1) > 0.55) px(ctx, X + (n * 9 | 0) % 10 + 2, Y + (n * 27 | 0) % 10 + 2, 5, 1, "#6FB0E8");
+          if (hash(x + 11, y + 6) > 0.62) px(ctx, X + (n * 17 | 0) % 9 + 3, Y + (n * 13 | 0) % 9 + 4, 4, 1, "#2568B0");
+          if (hash(x + 13, y + 9) > 0.92) px(ctx, X + (n * 23 | 0) % 11 + 2, Y + (n * 29 | 0) % 11 + 2, 1, 1, "#FFFFFF");
           if (g(x, y - 1) !== WATER) {
-            px(ctx, X, Y, T, 2, "#3E86AE");
-            px(ctx, X, Y, T, 1, "#2F6C90");
-            px(ctx, X, Y + 2, T, 1, "#86C4E0");
+            px(ctx, X, Y, T, 2, "#2568B0");
+            px(ctx, X, Y, T, 1, "#1B4E8A");
+            px(ctx, X, Y + 2, T, 1, "#EEF6FB");
           }
           if (g(x, y + 1) !== WATER) {
-            px(ctx, X, Y + T - 2, T, 2, "#3E86AE");
-            px(ctx, X, Y + T - 1, T, 1, "#2F6C90");
+            px(ctx, X, Y + T - 2, T, 1, "#EEF6FB");
+            px(ctx, X, Y + T - 1, T, 1, "#1B4E8A");
           }
           if (g(x - 1, y) !== WATER) {
-            px(ctx, X, Y, 2, T, "#3E86AE");
-            px(ctx, X, Y, 1, T, "#2F6C90");
+            px(ctx, X, Y, 1, T, "#1B4E8A");
+            px(ctx, X + 1, Y, 1, T, "#EEF6FB");
           }
           if (g(x + 1, y) !== WATER) {
-            px(ctx, X + T - 2, Y, 2, T, "#3E86AE");
-            px(ctx, X + T - 1, Y, 1, T, "#2F6C90");
+            px(ctx, X + T - 1, Y, 1, T, "#1B4E8A");
+            px(ctx, X + T - 2, Y, 1, T, "#EEF6FB");
           }
           break;
         }
       case POOL:
         {
-          px(ctx, X, Y, T, T, "#49B4E2");
-          if ((y % 2 === 0) && hash(x + 8, y + 3) > 0.35) px(ctx, X + 2, Y + 6, 12, 2, "#9ADDF4");
-          if (hash(x + 2, y + 9) > 0.5) px(ctx, X + (n * 11 | 0) % 10 + 3, Y + (n * 19 | 0) % 10 + 3, 3, 1, "#C8EEFB");
+          px(ctx, X, Y, T, T, "#45A0DE");
+          if ((y % 2 === 0) && hash(x + 8, y + 3) > 0.35) px(ctx, X + 2, Y + 6, 12, 1, "#7CC0EE");
+          if (hash(x + 2, y + 9) > 0.55) px(ctx, X + (n * 11 | 0) % 10 + 3, Y + (n * 19 | 0) % 10 + 3, 3, 1, "#A6D8F4");
           if (g(x, y - 1) !== POOL) {
-            px(ctx, X, Y, T, 2, "#2E8FC4");
-            px(ctx, X, Y, T, 1, "#1A6FA0");
-            px(ctx, X, Y + 2, T, 1, "#7FD2F0");
+            px(ctx, X, Y, T, 2, "#2568B0");
+            px(ctx, X, Y, T, 1, "#1B4E8A");
+            px(ctx, X, Y + 2, T, 1, "#EEF6FB");
           }
           if (g(x, y + 1) !== POOL) {
-            px(ctx, X, Y + T - 2, T, 2, "#2E8FC4");
-            px(ctx, X, Y + T - 1, T, 1, "#1A6FA0");
+            px(ctx, X, Y + T - 2, T, 1, "#EEF6FB");
+            px(ctx, X, Y + T - 1, T, 1, "#1B4E8A");
           }
           if (g(x - 1, y) !== POOL) {
-            px(ctx, X, Y, 2, T, "#2E8FC4");
-            px(ctx, X, Y, 1, T, "#1A6FA0");
+            px(ctx, X, Y, 1, T, "#1B4E8A");
+            px(ctx, X + 1, Y, 1, T, "#EEF6FB");
           }
           if (g(x + 1, y) !== POOL) {
-            px(ctx, X + T - 2, Y, 2, T, "#2E8FC4");
-            px(ctx, X + T - 1, Y, 1, T, "#1A6FA0");
+            px(ctx, X + T - 1, Y, 1, T, "#1B4E8A");
+            px(ctx, X + T - 2, Y, 1, T, "#EEF6FB");
           }
           break;
         }
       case FLOOR:
         {
-          px(ctx, X, Y, T, T, n > 0.5 ? "#F2ECDF" : "#EDE6D7");
-          px(ctx, X, Y + T - 1, T, 1, "#E0D8C6");
-          px(ctx, X + T - 1, Y, 1, T, "#E0D8C6");
-          ao(ctx, x, y, "#C6C1B7");
+          const chk = (x + y) % 2;
+          px(ctx, X, Y, T, T, chk ? n > 0.5 ? "#EDE7D6" : "#EAE4D2" : n > 0.5 ? "#E8E1CE" : "#E5DECA");
+          px(ctx, X, Y + T - 1, T, 1, "#D6CEB8");
+          px(ctx, X + T - 1, Y, 1, T, "#D6CEB8");
+          if (hash(x + 8, y + 3) > 0.94) px(ctx, X + (n * 9 | 0) % 12 + 2, Y + (n * 21 | 0) % 12 + 2, 2, 1, "#DAD2BD");
+          ao(ctx, x, y, "#B6AE9C");
           break;
         }
       case CARPET:
         {
           if (x >= 29 && x <= 33 && y >= 14 && y <= 20) {
-            px(ctx, X, Y, T, T, n > 0.5 ? "#D9CDBA" : "#D4C8B4");
+            px(ctx, X, Y, T, T, n > 0.5 ? "#DCCFB4" : "#D7CAAE");
+            if ((x + y) % 2) px(ctx, X + 7, Y + 7, 2, 2, "#CBBC9E");
             if (g(x, y - 1) !== CARPET) {
-              px(ctx, X, Y, T, 2, "#C2B49C");
-              for (let i = 2; i < T; i += 4) px(ctx, X + i, Y + 2, 1, 1, "#C2B49C");
+              px(ctx, X, Y, T, 2, "#B9A882");
+              for (let i = 2; i < T; i += 4) px(ctx, X + i, Y + 2, 1, 1, "#B9A882");
             }
             if (g(x, y + 1) !== CARPET) {
-              px(ctx, X, Y + T - 2, T, 2, "#C2B49C");
-              for (let i = 2; i < T; i += 4) px(ctx, X + i, Y + T - 3, 1, 1, "#C2B49C");
+              px(ctx, X, Y + T - 2, T, 2, "#B9A882");
+              for (let i = 2; i < T; i += 4) px(ctx, X + i, Y + T - 3, 1, 1, "#B9A882");
             }
-            if (g(x - 1, y) !== CARPET) px(ctx, X, Y, 2, T, "#C2B49C");
-            if (g(x + 1, y) !== CARPET) px(ctx, X + T - 2, Y, 2, T, "#C2B49C");
+            if (g(x - 1, y) !== CARPET) px(ctx, X, Y, 2, T, "#B9A882");
+            if (g(x + 1, y) !== CARPET) px(ctx, X + T - 2, Y, 2, T, "#B9A882");
           } else {
-            px(ctx, X, Y, T, T, n > 0.5 ? "#CFE0CC" : "#C9DBC6");
-            if (g(x, y - 1) !== CARPET) px(ctx, X, Y, T, 1, "#B7CCB4");
-            if (g(x, y + 1) !== CARPET) px(ctx, X, Y + T - 1, T, 1, "#B7CCB4");
-            if (g(x - 1, y) !== CARPET) px(ctx, X, Y, 1, T, "#B7CCB4");
-            if (g(x + 1, y) !== CARPET) px(ctx, X + T - 1, Y, 1, T, "#B7CCB4");
-            if ((x + y) % 2) px(ctx, X + 7, Y + 7, 2, 2, "#B7CCB4");
+            px(ctx, X, Y, T, T, n > 0.5 ? "#C9DEC0" : "#C3D8BA");
+            if (g(x, y - 1) !== CARPET) px(ctx, X, Y, T, 1, "#A8C6A0");
+            if (g(x, y + 1) !== CARPET) px(ctx, X, Y + T - 1, T, 1, "#A8C6A0");
+            if (g(x - 1, y) !== CARPET) px(ctx, X, Y, 1, T, "#A8C6A0");
+            if (g(x + 1, y) !== CARPET) px(ctx, X + T - 1, Y, 1, T, "#A8C6A0");
+            if ((x + y) % 2) px(ctx, X + 7, Y + 7, 2, 2, "#A8C6A0");
           }
-          ao(ctx, x, y, "#AAB8A7");
+          ao(ctx, x, y, "#A2B2A4");
           break;
         }
       case WALL:
         {
-          px(ctx, X, Y, T, T, "#C9BFAE");
+          px(ctx, X, Y, T, T, "#D5CBB4");
           if (wallish(g(x, y - 1))) {
-            px(ctx, X + 2, Y + 5, 1, 1, "#BCB2A1");
-            px(ctx, X + 9, Y + 11, 1, 1, "#BCB2A1");
+            px(ctx, X + 2, Y + 5, 1, 1, "#C6BCA6");
+            px(ctx, X + 9, Y + 11, 1, 1, "#C6BCA6");
+            px(ctx, X + 5, Y + 8, 2, 1, "#E2D9C4");
           } else {
-            px(ctx, X, Y, T, 4, "#8A7D68");
-            px(ctx, X, Y, T, 1, "#4A4234");
-            px(ctx, X, Y + 4, T, 1, "#D8CFBF");
+            px(ctx, X, Y, T, 4, "#7E7262");
+            px(ctx, X, Y, T, 1, "#262A36");
+            px(ctx, X, Y + 1, T, 1, "#968872");
+            px(ctx, X, Y + 4, T, 1, "#EAE2CE");
           }
           const fs = g(x, y + 1);
           if (fs === FLOOR || fs === CORR || fs === CARPET || fs === ATRIUM || fs === LOBBY || fs === DOOR) {
-            px(ctx, X, Y + T - 3, T, 1, "#4A4234");
-            px(ctx, X, Y + T - 2, T, 2, "#A89A84");
+            px(ctx, X, Y + T - 3, T, 1, "#262A36");
+            px(ctx, X, Y + T - 2, T, 2, "#A29478");
+            px(ctx, X, Y + T - 1, T, 1, "#8E8068");
           } else if (!wallish(fs)) {
-            px(ctx, X, Y + T - 2, T, 2, "#8A7D68");
-            px(ctx, X, Y + T - 1, T, 1, "#4A4234");
+            px(ctx, X, Y + T - 2, T, 2, "#7E7262");
+            px(ctx, X, Y + T - 1, T, 1, "#262A36");
           }
-          if (!wallish(g(x - 1, y))) px(ctx, X, Y, 1, T, "#4A4234");
-          if (!wallish(g(x + 1, y))) px(ctx, X + T - 1, Y, 1, T, "#4A4234");
+          if (!wallish(g(x - 1, y))) px(ctx, X, Y, 1, T, "#262A36");
+          if (!wallish(g(x + 1, y))) px(ctx, X + T - 1, Y, 1, T, "#262A36");
           break;
         }
       case GLASS:
         {
-          px(ctx, X, Y, T, T, "#9CC6DE");
-          px(ctx, X, Y, T, 2, "#BCDEF0");
-          px(ctx, X + 5, Y, 1, T, "#5E86C4");
-          px(ctx, X + 10, Y, 1, T, "#5E86C4");
-          px(ctx, X, Y + T - 2, T, 2, "#3E66B0");
-          px(ctx, X, Y + T - 1, T, 1, "#1E4FA3");
-          if (g(x - 1, y) !== GLASS) px(ctx, X, Y, 1, T, "#1E4FA3");
-          if (g(x + 1, y) !== GLASS) px(ctx, X + T - 1, Y, 1, T, "#1E4FA3");
+          px(ctx, X, Y, T, T, "#4E7EC0");
+          px(ctx, X, Y, T, 2, "#9CC6E8");
+          px(ctx, X + 5, Y, 1, T, "#2E5490");
+          px(ctx, X + 10, Y, 1, T, "#2E5490");
+          px(ctx, X, Y + T - 2, T, 2, "#2E5490");
+          px(ctx, X, Y + T - 1, T, 1, "#20304E");
+          if (g(x - 1, y) !== GLASS) px(ctx, X, Y, 1, T, "#20304E");
+          if (g(x + 1, y) !== GLASS) px(ctx, X + T - 1, Y, 1, T, "#20304E");
           if (hash(x + 6, y + 2) > 0.6) {
             const gx = X + 2 + (n * 7 | 0) % 4;
-            px(ctx, gx + 4, Y + 3, 2, 2, "rgba(255,255,255,0.55)");
+            px(ctx, gx + 4, Y + 3, 2, 2, "rgba(255,255,255,0.6)");
             px(ctx, gx + 2, Y + 5, 2, 2, "rgba(255,255,255,0.55)");
-            px(ctx, gx, Y + 7, 2, 2, "rgba(255,255,255,0.55)");
+            px(ctx, gx, Y + 7, 2, 2, "rgba(255,255,255,0.5)");
           }
           break;
         }
       case ROOF:
         {
-          px(ctx, X, Y, T, T, "#C8D2CC");
+          px(ctx, X, Y, T, T, "#4F7FD0");
           break;
         }
       case DOOR:
         {
-          px(ctx, X, Y, T, T, "#E4DCCA");
-          px(ctx, X + 1, Y, T - 2, 3, "#8A7A63");
+          px(ctx, X, Y, T, T, "#EAE2CE");
+          px(ctx, X + 1, Y, T - 2, 3, "#6E4A26");
+          px(ctx, X + 1, Y, T - 2, 1, "#262A36");
+          px(ctx, X + 2, Y + 1, 3, 1, "#9A6E3E");
           break;
         }
     }
@@ -590,94 +628,123 @@ const ASMap = (() => {
     const X = x * T,
       Y = y * T,
       n = hash(x, y);
-    const OL = "#2E5638",
-      c1 = n > 0.5 ? "#56AB62" : "#4FA45B",
-      c2 = n > 0.5 ? "#73C079" : "#69B870",
-      c3 = "#3C7849";
+    const OL = "#1F4A1C",
+      DK = "#2E6E2A",
+      MID = n > 0.5 ? "#3F8A34" : "#3C8531",
+      LT = n > 0.5 ? "#63B04A" : "#5EAB46",
+      HI = "#8CCB6D",
+      GL = "#C8ECAA";
     const big = tx => hash(tx * 13 + 5, y * 17 + 3) < 0.12 && tx % 4 === 0 && g(tx + 1, y) === TREE;
     if (x % 4 === 1 && g(x - 1, y) === TREE && big(x - 1)) return;
     if (big(x)) {
-      px(ctx, X - 2, Y + 12, 22, 3, "rgba(54,40,22,0.22)");
-      px(ctx, X + 5, Y + 7, 7, 8, "#2E1D0C");
+      px(ctx, X - 2, Y + 12, 22, 3, "rgba(28,42,68,0.24)");
+      px(ctx, X + 5, Y + 7, 7, 8, "#3A2410");
       px(ctx, X + 6, Y + 7, 5, 7, "#5C3E20");
       px(ctx, X + 7, Y + 7, 2, 7, "#7A5A3C");
+      px(ctx, X + 4, Y - 6, 8, 1, OL);
       px(ctx, X + 1, Y - 5, 14, 1, OL);
       px(ctx, X - 2, Y - 4, 20, 1, OL);
       px(ctx, X - 3, Y - 3, 22, 11, OL);
       px(ctx, X - 2, Y + 8, 20, 1, OL);
       px(ctx, X + 1, Y + 9, 14, 1, OL);
-      px(ctx, X + 2, Y - 4, 12, 1, c1);
-      px(ctx, X - 1, Y - 3, 18, 1, c1);
-      px(ctx, X - 2, Y - 2, 20, 9, c1);
-      px(ctx, X - 1, Y + 7, 18, 1, c1);
-      px(ctx, X + 2, Y + 8, 12, 1, c1);
-      px(ctx, X + 2, Y - 4, 8, 1, c2);
-      px(ctx, X - 1, Y - 3, 9, 2, c2);
-      px(ctx, X - 2, Y - 1, 6, 5, c2);
-      px(ctx, X + 11, Y + 1, 8, 6, c3);
-      px(ctx, X + 1, Y + 7, 14, 1, c3);
-      px(ctx, X + 3, Y - 3, 3, 1, "#E9F5E2");
+      px(ctx, X + 5, Y - 5, 6, 1, MID);
+      px(ctx, X + 2, Y - 4, 12, 1, MID);
+      px(ctx, X - 1, Y - 3, 18, 1, MID);
+      px(ctx, X - 2, Y - 2, 20, 9, MID);
+      px(ctx, X - 1, Y + 7, 18, 1, DK);
+      px(ctx, X + 2, Y + 8, 12, 1, DK);
+      px(ctx, X + 5, Y - 5, 4, 1, LT);
+      px(ctx, X + 2, Y - 4, 8, 1, LT);
+      px(ctx, X - 1, Y - 3, 9, 2, LT);
+      px(ctx, X - 2, Y - 1, 6, 5, LT);
+      px(ctx, X + 6, Y - 2, 4, 3, LT);
+      px(ctx, X + 3, Y - 4, 3, 1, HI);
+      px(ctx, X, Y - 2, 3, 2, HI);
+      px(ctx, X + 11, Y + 1, 8, 6, DK);
+      px(ctx, X + 3, Y + 5, 12, 2, DK);
+      px(ctx, X + 13, Y - 2, 4, 2, LT);
+      px(ctx, X + 4, Y - 3, 2, 1, GL);
+      px(ctx, X + 8, Y - 5, 2, 1, GL);
       return;
     }
     if (hash(x * 7 + 11, y * 5 + 2) > 0.42) {
-      px(ctx, X + 3, Y + 13, 10, 2, "rgba(54,40,22,0.18)");
+      px(ctx, X + 3, Y + 13, 10, 2, "rgba(28,42,68,0.2)");
       px(ctx, X + 7, Y + 10, 2, 4, "#5C3E20");
+      px(ctx, X + 6, Y + 2, 4, 1, OL);
       px(ctx, X + 4, Y + 3, 8, 1, OL);
       px(ctx, X + 2, Y + 4, 12, 8, OL);
       px(ctx, X + 4, Y + 12, 8, 1, OL);
-      px(ctx, X + 5, Y + 4, 6, 1, c1);
-      px(ctx, X + 3, Y + 5, 10, 6, c1);
-      px(ctx, X + 5, Y + 11, 6, 1, c1);
-      px(ctx, X + 5, Y + 4, 4, 1, c2);
-      px(ctx, X + 3, Y + 5, 4, 3, c2);
-      px(ctx, X + 9, Y + 8, 4, 3, c3);
-      px(ctx, X + 5, Y + 5, 2, 1, "#E9F5E2");
+      px(ctx, X + 6, Y + 3, 4, 1, MID);
+      px(ctx, X + 5, Y + 4, 6, 1, MID);
+      px(ctx, X + 3, Y + 5, 10, 6, MID);
+      px(ctx, X + 5, Y + 11, 6, 1, DK);
+      px(ctx, X + 6, Y + 3, 3, 1, LT);
+      px(ctx, X + 5, Y + 4, 4, 1, LT);
+      px(ctx, X + 3, Y + 5, 4, 3, LT);
+      px(ctx, X + 6, Y + 4, 2, 1, HI);
+      px(ctx, X + 9, Y + 8, 4, 3, DK);
+      px(ctx, X + 4, Y + 10, 8, 1, DK);
+      px(ctx, X + 5, Y + 5, 2, 1, GL);
       return;
     }
-    px(ctx, X + 2, Y + 13, 12, 2, "rgba(54,40,22,0.20)");
-    px(ctx, X + 5, Y + 9, 6, 6, "#2E1D0C");
+    px(ctx, X + 2, Y + 13, 12, 2, "rgba(28,42,68,0.22)");
+    px(ctx, X + 5, Y + 9, 6, 6, "#3A2410");
     px(ctx, X + 6, Y + 9, 4, 5, "#5C3E20");
     px(ctx, X + 7, Y + 9, 1, 5, "#7A5A3C");
-    px(ctx, X + 5, Y - 1, 6, 1, OL);
+    px(ctx, X + 6, Y - 2, 4, 1, OL);
+    px(ctx, X + 4, Y - 1, 8, 1, OL);
     px(ctx, X + 3, Y, 10, 1, OL);
     px(ctx, X + 2, Y + 1, 12, 10, OL);
     px(ctx, X + 3, Y + 11, 10, 1, OL);
-    px(ctx, X + 5, Y, 6, 1, c1);
-    px(ctx, X + 4, Y + 1, 8, 1, c1);
-    px(ctx, X + 3, Y + 2, 10, 8, c1);
-    px(ctx, X + 4, Y + 10, 8, 1, c1);
-    px(ctx, X + 5, Y, 4, 1, c2);
-    px(ctx, X + 4, Y + 1, 5, 2, c2);
-    px(ctx, X + 3, Y + 3, 3, 3, c2);
-    px(ctx, X + 9, Y + 5, 4, 5, c3);
-    px(ctx, X + 6, Y + 10, 6, 1, c3);
-    px(ctx, X + 5, Y + 1, 2, 1, "#E9F5E2");
+    px(ctx, X + 6, Y - 1, 4, 1, MID);
+    px(ctx, X + 4, Y, 8, 1, MID);
+    px(ctx, X + 3, Y + 1, 10, 9, MID);
+    px(ctx, X + 4, Y + 10, 8, 1, DK);
+    px(ctx, X + 6, Y - 1, 3, 1, LT);
+    px(ctx, X + 4, Y, 5, 1, LT);
+    px(ctx, X + 3, Y + 1, 4, 4, LT);
+    px(ctx, X + 8, Y + 1, 3, 2, LT);
+    px(ctx, X + 5, Y, 2, 1, HI);
+    px(ctx, X + 3, Y + 2, 2, 2, HI);
+    px(ctx, X + 9, Y + 5, 4, 5, DK);
+    px(ctx, X + 4, Y + 8, 4, 2, DK);
+    px(ctx, X + 5, Y + 1, 2, 1, GL);
+    if (hash(x * 3 + 1, y * 11 + 4) > 0.93) {
+      px(ctx, X + 5, Y + 3, 2, 2, "#F2A6C6");
+      px(ctx, X + 10, Y + 2, 2, 2, "#F2A6C6");
+      px(ctx, X + 8, Y + 6, 2, 2, "#F2A6C6");
+      px(ctx, X + 5, Y + 3, 1, 1, "#FFCFE0");
+      px(ctx, X + 10, Y + 2, 1, 1, "#FFCFE0");
+    }
   }
   function drawHedge(ctx, x, y) {
     const X = x * T,
       Y = y * T;
-    px(ctx, X + 1, Y + 13, 14, 2, "rgba(54,40,22,0.16)");
-    px(ctx, X + 2, Y + 3, 12, 1, "#2E5638");
-    px(ctx, X + 1, Y + 4, 14, 9, "#2E5638");
-    px(ctx, X + 2, Y + 13, 12, 1, "#2E5638");
-    px(ctx, X + 3, Y + 4, 10, 1, "#52A65D");
-    px(ctx, X + 2, Y + 5, 12, 7, "#52A65D");
-    px(ctx, X + 3, Y + 12, 10, 1, "#52A65D");
-    px(ctx, X + 3, Y + 4, 6, 1, "#69B870");
-    px(ctx, X + 2, Y + 5, 4, 2, "#69B870");
-    px(ctx, X + 9, Y + 9, 5, 3, "#3C7849");
-    px(ctx, X + 4, Y + 5, 2, 1, "#E9F5E2");
+    px(ctx, X + 1, Y + 13, 14, 2, "rgba(28,42,68,0.18)");
+    px(ctx, X + 2, Y + 3, 12, 1, "#1F4A1C");
+    px(ctx, X + 1, Y + 4, 14, 9, "#1F4A1C");
+    px(ctx, X + 2, Y + 13, 12, 1, "#1F4A1C");
+    px(ctx, X + 3, Y + 4, 10, 1, "#3F8A34");
+    px(ctx, X + 2, Y + 5, 12, 7, "#3F8A34");
+    px(ctx, X + 3, Y + 12, 10, 1, "#2E6E2A");
+    px(ctx, X + 3, Y + 4, 6, 1, "#63B04A");
+    px(ctx, X + 2, Y + 5, 4, 2, "#63B04A");
+    px(ctx, X + 8, Y + 5, 4, 1, "#63B04A");
+    px(ctx, X + 3, Y + 5, 2, 1, "#8CCB6D");
+    px(ctx, X + 9, Y + 9, 5, 3, "#2E6E2A");
+    px(ctx, X + 3, Y + 10, 4, 2, "#2E6E2A");
+    px(ctx, X + 4, Y + 5, 2, 1, "#C8ECAA");
   }
   function drawFlower(ctx, x, y) {
     const X = x * T,
       Y = y * T,
       n = hash(x * 5, y * 3);
-    const c = n > 0.66 ? "#F2D06B" : n > 0.33 ? "#EF9BB1" : "#F4F1E6";
+    const c = n > 0.66 ? "#F2D06B" : n > 0.33 ? "#F2A6C6" : "#F8F6EC";
     const o = shade(c, -70),
       hl = shade(c, 26),
       ce = shade(c, -26);
-    px(ctx, X + 5, Y + 11, 1, 2, "#3E7A47");
-    px(ctx, X + 6, Y + 12, 2, 1, "#5E9E63");
+    px(ctx, X + 5, Y + 11, 1, 2, "#2E6E2A");
+    px(ctx, X + 6, Y + 12, 2, 1, "#57A03E");
     px(ctx, X + 4, Y + 6, 3, 1, o);
     px(ctx, X + 4, Y + 10, 3, 1, o);
     px(ctx, X + 3, Y + 7, 1, 3, o);
@@ -685,7 +752,7 @@ const ASMap = (() => {
     px(ctx, X + 4, Y + 7, 3, 3, c);
     px(ctx, X + 4, Y + 7, 1, 1, hl);
     px(ctx, X + 5, Y + 8, 1, 1, ce);
-    px(ctx, X + 10, Y + 7, 1, 2, "#3E7A47");
+    px(ctx, X + 10, Y + 7, 1, 2, "#2E6E2A");
     px(ctx, X + 10, Y + 3, 2, 1, o);
     px(ctx, X + 10, Y + 6, 2, 1, o);
     px(ctx, X + 9, Y + 4, 1, 2, o);
@@ -697,7 +764,7 @@ const ASMap = (() => {
     const X = f.x * T,
       Y = f.y * T;
     const n = hash(f.x * 7, f.y * 5);
-    if (GROUND_SHADOW.has(f.kind)) px(ctx, X + 2, Y + 13, 12, 2, "rgba(48,36,20,0.15)");
+    if (GROUND_SHADOW.has(f.kind)) px(ctx, X + 2, Y + 13, 12, 2, "rgba(28,42,68,0.18)");
     switch (f.kind) {
       case "desk":
         px(ctx, X + 2, Y + 3, 12, 1, "#794A18");
@@ -780,14 +847,14 @@ const ASMap = (() => {
         px(ctx, X + 4, Y + 9, 8, 6, "#6E3D1C");
         px(ctx, X + 5, Y + 10, 6, 4, "#B5703F");
         px(ctx, X + 5, Y + 10, 1, 4, "#CE8A52");
-        px(ctx, X + 6, Y, 4, 1, "#2E5638");
-        px(ctx, X + 5, Y + 1, 6, 2, "#2E5638");
-        px(ctx, X + 3, Y + 2, 10, 8, "#2E5638");
-        px(ctx, X + 6, Y + 1, 4, 3, "#5FA868");
-        px(ctx, X + 4, Y + 3, 8, 6, "#4E9657");
-        px(ctx, X + 5, Y + 3, 3, 2, "#6FBA78");
-        px(ctx, X + 9, Y + 6, 3, 3, "#3E7A47");
-        px(ctx, X + 6, Y + 1, 2, 1, "#DFF2DD");
+        px(ctx, X + 6, Y, 4, 1, "#1F4A1C");
+        px(ctx, X + 5, Y + 1, 6, 2, "#1F4A1C");
+        px(ctx, X + 3, Y + 2, 10, 8, "#1F4A1C");
+        px(ctx, X + 6, Y + 1, 4, 3, "#63B04A");
+        px(ctx, X + 4, Y + 3, 8, 6, "#3F8A34");
+        px(ctx, X + 5, Y + 3, 3, 2, "#8CCB6D");
+        px(ctx, X + 9, Y + 6, 3, 3, "#2E6E2A");
+        px(ctx, X + 6, Y + 1, 2, 1, "#C8ECAA");
         break;
       case "coffee":
         px(ctx, X + 2, Y + 2, 12, 1, "#3A342E");
@@ -958,16 +1025,16 @@ const ASMap = (() => {
           px(ctx, X, Y + 3, T, 6, "#B5895A");
           px(ctx, X, Y + 3, T, 2, "#CA9C69");
           px(ctx, X, Y + 8, T, 1, "#946B40");
-          const pg1 = n > 0.5 ? "#5FA868" : "#4E9657";
-          const pg2 = n > 0.5 ? "#7CC074" : "#69B073";
+          const pg1 = n > 0.5 ? "#3F8A34" : "#57A03E";
+          const pg2 = n > 0.5 ? "#63B04A" : "#4E9138";
           px(ctx, X + 1, Y + 1, 5, 5, pg1);
           px(ctx, X + 8, Y, 6, 5, pg2);
           px(ctx, X + 4, Y, 3, 3, pg2);
           px(ctx, X + 10, Y + 2, 3, 3, pg1);
-          px(ctx, X + 1, Y + 5, 5, 1, "#3E7A47");
-          px(ctx, X + 8, Y + 4, 6, 1, "#3E7A47");
-          const bc1 = n > 0.5 ? "#EF9BB1" : "#F2D06B";
-          const bc2 = n > 0.5 ? "#F4F1E6" : "#EF9BB1";
+          px(ctx, X + 1, Y + 5, 5, 1, "#2E6E2A");
+          px(ctx, X + 8, Y + 4, 6, 1, "#2E6E2A");
+          const bc1 = n > 0.5 ? "#F2A6C6" : "#F2D06B";
+          const bc2 = n > 0.5 ? "#F8F6EC" : "#F2A6C6";
           px(ctx, X + 5, Y, 2, 1, shade(bc1, -70));
           px(ctx, X + 5, Y + 3, 2, 1, shade(bc1, -70));
           px(ctx, X + 4, Y + 1, 1, 2, shade(bc1, -70));
@@ -984,7 +1051,7 @@ const ASMap = (() => {
         }
       case "sofa":
         {
-          px(ctx, X + 2, Y + 13, 28, 2, "rgba(48,36,20,0.15)");
+          px(ctx, X + 2, Y + 13, 28, 2, "rgba(28,42,68,0.18)");
           px(ctx, X + 2, Y + 2, 28, 1, "#7C3A24");
           px(ctx, X + 1, Y + 3, 1, 10, "#7C3A24");
           px(ctx, X + 30, Y + 3, 1, 10, "#7C3A24");
@@ -1005,7 +1072,7 @@ const ASMap = (() => {
         }
       case "lowshelf":
         {
-          px(ctx, X + 1, Y + 10, 14, 2, "rgba(48,36,20,0.14)");
+          px(ctx, X + 1, Y + 10, 14, 2, "rgba(28,42,68,0.16)");
           px(ctx, X + 1, Y, 14, 1, "#4A3823");
           px(ctx, X, Y + 1, 16, 9, "#4A3823");
           px(ctx, X + 1, Y + 1, 14, 8, "#9C7142");
@@ -1021,7 +1088,7 @@ const ASMap = (() => {
         }
       case "counter":
         {
-          px(ctx, X + 1, Y + 11, 14, 2, "rgba(48,36,20,0.14)");
+          px(ctx, X + 1, Y + 11, 14, 2, "rgba(28,42,68,0.16)");
           px(ctx, X + 1, Y + 1, 14, 1, "#4A3823");
           px(ctx, X, Y + 2, 16, 9, "#4A3823");
           px(ctx, X + 1, Y + 2, 14, 8, "#B98F62");
@@ -1037,7 +1104,7 @@ const ASMap = (() => {
         }
       case "crate":
         {
-          px(ctx, X + 2, Y + 12, 12, 2, "rgba(48,36,20,0.15)");
+          px(ctx, X + 2, Y + 12, 12, 2, "rgba(28,42,68,0.18)");
           px(ctx, X + 2, Y + 3, 12, 1, "#5A3D24");
           px(ctx, X + 1, Y + 4, 14, 9, "#5A3D24");
           px(ctx, X + 2, Y + 13, 12, 1, "#5A3D24");
@@ -1051,18 +1118,18 @@ const ASMap = (() => {
         }
       case "planterlow":
         {
-          px(ctx, X + 1, Y + 13, 14, 2, "rgba(48,36,20,0.15)");
+          px(ctx, X + 1, Y + 13, 14, 2, "rgba(28,42,68,0.18)");
           px(ctx, X + 2, Y + 7, 12, 1, "#6E7278");
           px(ctx, X + 1, Y + 8, 14, 6, "#6E7278");
           px(ctx, X + 2, Y + 8, 12, 5, "#B8BDC4");
           px(ctx, X + 2, Y + 8, 12, 1, "#D0D4DA");
           px(ctx, X + 2, Y + 12, 12, 1, "#9AA0A8");
-          px(ctx, X + 5, Y + 1, 6, 1, "#2E5638");
-          px(ctx, X + 3, Y + 2, 10, 6, "#2E5638");
-          px(ctx, X + 4, Y + 2, 8, 5, "#4E9657");
-          px(ctx, X + 4, Y + 2, 4, 2, "#6FBA78");
-          px(ctx, X + 10, Y + 4, 3, 3, "#3C7849");
-          px(ctx, X + 5, Y + 2, 2, 1, "#DFF2DD");
+          px(ctx, X + 5, Y + 1, 6, 1, "#1F4A1C");
+          px(ctx, X + 3, Y + 2, 10, 6, "#1F4A1C");
+          px(ctx, X + 4, Y + 2, 8, 5, "#3F8A34");
+          px(ctx, X + 4, Y + 2, 4, 2, "#63B04A");
+          px(ctx, X + 10, Y + 4, 3, 3, "#2E6E2A");
+          px(ctx, X + 5, Y + 2, 2, 1, "#C8ECAA");
           break;
         }
       case "arcade":
@@ -1088,7 +1155,7 @@ const ASMap = (() => {
         {
           const cc = ["#F2F2EE", "#C7CCD2", "#C93B33", "#2E4A78", "#3E4450"][hash(f.x * 13, f.y * 7) * 5 | 0];
           const co = shade(cc, -70);
-          px(ctx, X + 2, Y + 12, 28, 3, "rgba(48,36,20,0.18)");
+          px(ctx, X + 2, Y + 12, 28, 3, "rgba(28,42,68,0.2)");
           px(ctx, X + 9, Y + 3, 14, 1, co);
           px(ctx, X + 8, Y + 4, 16, 3, co);
           px(ctx, X + 9, Y + 4, 14, 3, cc);
@@ -1111,7 +1178,7 @@ const ASMap = (() => {
         }
       case "medbed":
         {
-          px(ctx, X + 2, Y + 13, 28, 2, "rgba(48,36,20,0.15)");
+          px(ctx, X + 2, Y + 13, 28, 2, "rgba(28,42,68,0.18)");
           px(ctx, X + 2, Y + 4, 28, 1, "#8E969E");
           px(ctx, X + 1, Y + 5, 30, 8, "#8E969E");
           px(ctx, X + 2, Y + 5, 28, 7, "#F7F9FB");
@@ -1131,32 +1198,37 @@ const ASMap = (() => {
         }
       case "loctree":
         {
-          const OL = "#2E5638";
-          px(ctx, X + 3, Y + 26, 26, 4, "rgba(54,40,22,0.20)");
+          const OL = "#1F4A1C";
+          px(ctx, X + 3, Y + 26, 26, 4, "rgba(28,42,68,0.24)");
           px(ctx, X + 13, Y + 14, 6, 13, "#4A2E14");
           px(ctx, X + 14, Y + 14, 4, 12, "#8A5220");
           px(ctx, X + 15, Y + 14, 1, 12, "#A86A30");
+          px(ctx, X + 12, Y - 7, 8, 1, OL);
           px(ctx, X + 8, Y - 6, 16, 1, OL);
           px(ctx, X + 4, Y - 5, 24, 1, OL);
           px(ctx, X + 2, Y - 4, 28, 2, OL);
           px(ctx, X + 1, Y - 2, 30, 14, OL);
           px(ctx, X + 2, Y + 12, 28, 2, OL);
           px(ctx, X + 6, Y + 14, 20, 1, OL);
-          px(ctx, X + 8, Y - 5, 16, 1, "#69B870");
-          px(ctx, X + 4, Y - 4, 24, 2, "#69B870");
-          px(ctx, X + 2, Y - 2, 28, 13, "#4FA45B");
-          px(ctx, X + 3, Y - 2, 12, 6, "#69B870");
-          px(ctx, X + 18, Y + 4, 10, 8, "#3C7849");
-          px(ctx, X + 4, Y + 11, 24, 2, "#3C7849");
-          px(ctx, X + 7, Y + 14, 18, 1, "#3C7849");
-          px(ctx, X + 6, Y - 3, 3, 1, "#E9F5E2");
-          px(ctx, X + 13, Y - 5, 2, 1, "#E9F5E2");
+          px(ctx, X + 12, Y - 6, 8, 1, "#63B04A");
+          px(ctx, X + 8, Y - 5, 16, 1, "#63B04A");
+          px(ctx, X + 4, Y - 4, 24, 2, "#63B04A");
+          px(ctx, X + 2, Y - 2, 28, 13, "#3F8A34");
+          px(ctx, X + 3, Y - 2, 12, 6, "#63B04A");
+          px(ctx, X + 5, Y - 3, 6, 3, "#8CCB6D");
+          px(ctx, X + 13, Y - 6, 5, 1, "#8CCB6D");
+          px(ctx, X + 18, Y + 4, 10, 8, "#2E6E2A");
+          px(ctx, X + 4, Y + 11, 24, 2, "#2E6E2A");
+          px(ctx, X + 7, Y + 14, 18, 1, "#2E6E2A");
+          px(ctx, X + 6, Y - 3, 3, 1, "#C8ECAA");
+          px(ctx, X + 13, Y - 5, 2, 1, "#C8ECAA");
           [[5, 0], [10, 2], [16, 1], [22, 2], [27, 0]].forEach(([tx, tl]) => {
-            px(ctx, X + tx, Y + 12 - tl, 1, 4 + tl, "#EF9BB1");
+            px(ctx, X + tx, Y + 12 - tl, 1, 4 + tl, "#F2A6C6");
             px(ctx, X + tx, Y + 15, 1, 2, "#E8557A");
           });
-          px(ctx, X + 8, Y + 6, 2, 2, "#EF9BB1");
-          px(ctx, X + 24, Y + 2, 2, 2, "#EF9BB1");
+          px(ctx, X + 8, Y + 6, 2, 2, "#F2A6C6");
+          px(ctx, X + 24, Y + 2, 2, 2, "#F2A6C6");
+          px(ctx, X + 24, Y + 2, 1, 1, "#FFCFE0");
           px(ctx, X + 8, Y + 7, 1, 1, "#E8557A");
           break;
         }
@@ -1270,9 +1342,9 @@ const ASMap = (() => {
         if (!b1) continue;
         const X = x * T,
           Y = y * T;
-        px(ctx, X + 3, Y + 5, 10, 6, "#1E4FA3");
-        px(ctx, X + 4, Y + 6, 8, 4, "#DCE9F2");
-        px(ctx, X + 8, Y + 6, 1, 4, "#5E86C4");
+        px(ctx, X + 3, Y + 5, 10, 6, "#20304E");
+        px(ctx, X + 4, Y + 6, 8, 4, "#BCDEF0");
+        px(ctx, X + 8, Y + 6, 1, 4, "#4E7EC0");
         px(ctx, X + 4, Y + 6, 3, 1, "#F4FAFF");
         px(ctx, X + 4, Y + T + 3, 8, T - 3, b1);
         const b2 = lit[g(x, y + 2)];
@@ -1343,14 +1415,14 @@ const ASMap = (() => {
         }
       } else if (rows === 2) {
         const gw = (b.x1 - b.x0 + 1) * T - 4;
-        px(ctx, b.x0 * T + 2, b.y0 * T + 4, gw, T - 2, "#74A86E");
-        px(ctx, b.x0 * T + 2, b.y0 * T + 4, gw, 2, "#8FC487");
-        px(ctx, b.x0 * T + 2, b.y0 * T + T + 1, gw, 1, "#5F9359");
+        px(ctx, b.x0 * T + 2, b.y0 * T + 4, gw, T - 2, "#57A03E");
+        px(ctx, b.x0 * T + 2, b.y0 * T + 4, gw, 2, "#6DB24A");
+        px(ctx, b.x0 * T + 2, b.y0 * T + T + 1, gw, 1, "#4E9138");
         for (let x = b.x0 + 1; x <= b.x1 - 1; x += 2) {
-          px(ctx, x * T + 2, b.y0 * T + 1, 7, 8, "#3E7A47");
-          px(ctx, x * T + 3, b.y0 * T + 3, 5, 5, "#5C9657");
-          px(ctx, x * T + 4, b.y0 * T + 2, 3, 3, "#7CC074");
-          px(ctx, x * T + 4, b.y0 * T + 2, 1, 1, "#A8DCA0");
+          px(ctx, x * T + 2, b.y0 * T + 1, 7, 8, "#1F4A1C");
+          px(ctx, x * T + 3, b.y0 * T + 3, 5, 5, "#3F8A34");
+          px(ctx, x * T + 4, b.y0 * T + 2, 3, 3, "#63B04A");
+          px(ctx, x * T + 4, b.y0 * T + 2, 1, 1, "#C8ECAA");
         }
       }
       const rx = b.x0 * T,
@@ -1362,7 +1434,7 @@ const ASMap = (() => {
       px(ctx, rx, ry, 1, rh, rol);
       px(ctx, rx + rw - 1, ry, 1, rh, rol);
       px(ctx, rx, ry + rh - 1, rw, 1, rol);
-      px(ctx, rx + 1, ry + rh, rw - 1, 2, "rgba(38,34,28,0.18)");
+      px(ctx, rx + 1, ry + rh, rw - 1, 2, "rgba(28,42,68,0.18)");
     });
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const t = g(x, y);
@@ -1393,16 +1465,16 @@ const ASMap = (() => {
       px(ctx, 16 * T, 28 * T + 4, 4 * T, 1, "#98A2AE");
       px(ctx, 16 * T, 28 * T + 11, 4 * T, 1, "#69727D");
       for (let i = 8; i < 4 * T; i += 12) px(ctx, 16 * T + i, 28 * T + 6, 1, 4, "#98A2AE");
-      px(ctx, 41 * T + 2, 27 * T + 1, 3 * T - 4, T - 2, "#B7A98E");
-      px(ctx, 41 * T + 2, 27 * T + 1, 3 * T - 4, 1, "#CBBFA4");
-      px(ctx, 41 * T + 2, 27 * T + T - 2, 3 * T - 4, 1, "#9C8E73");
-      px(ctx, 41 * T + 2, 27 * T + 1, 1, T - 2, "#9C8E73");
-      px(ctx, 44 * T - 3, 27 * T + 1, 1, T - 2, "#9C8E73");
-      px(ctx, 41 * T + 6, 27 * T + 5, 2 * T + 4, 6, "#A99A7D");
+      px(ctx, 41 * T + 2, 27 * T + 1, 3 * T - 4, T - 2, "#B08252");
+      px(ctx, 41 * T + 2, 27 * T + 1, 3 * T - 4, 1, "#C89C64");
+      px(ctx, 41 * T + 2, 27 * T + T - 2, 3 * T - 4, 1, "#8A6038");
+      px(ctx, 41 * T + 2, 27 * T + 1, 1, T - 2, "#8A6038");
+      px(ctx, 44 * T - 3, 27 * T + 1, 1, T - 2, "#8A6038");
+      px(ctx, 41 * T + 6, 27 * T + 5, 2 * T + 4, 6, "#A07444");
       const pool = (cx, cy) => {
-        px(ctx, cx - 8, cy - 3, 16, 7, "#585349");
-        px(ctx, cx - 6, cy - 2, 12, 5, "#665E4F");
-        px(ctx, cx - 3, cy - 1, 6, 3, "#786D57");
+        px(ctx, cx - 8, cy - 3, 16, 7, "#5E5850");
+        px(ctx, cx - 6, cy - 2, 12, 5, "#7E786E");
+        px(ctx, cx - 3, cy - 1, 6, 3, "#9A948A");
       };
       pool(716, 436);
       pool(768, 436);
@@ -1413,7 +1485,8 @@ const ASMap = (() => {
         px(ctx, cx - 1, cy - 15, 2, 9, "#23262B");
         px(ctx, cx - 4, cy - 7, 8, 3, "#3A3E44");
         px(ctx, cx - 4, cy - 7, 8, 1, "#5A6068");
-        px(ctx, cx - 2, cy - 4, 4, 1, "#F2D06B");
+        px(ctx, cx - 2, cy - 4, 4, 1, "#E6B23C");
+        px(ctx, cx - 1, cy - 4, 1, 1, "#FFE9A0");
       };
       pend(716, 436);
       pend(768, 436);
@@ -1500,12 +1573,12 @@ const ASMap = (() => {
       }
     }
     {
-      ctx.strokeStyle = "#C4B79B";
+      ctx.strokeStyle = "#A98B62";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(6 * T, 26 * T, 26, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.strokeStyle = "#F4F1E6";
+      ctx.strokeStyle = "#F2EADC";
       ctx.setLineDash([5, 5]);
       ctx.beginPath();
       ctx.arc(6 * T, 26 * T, 33, 0, Math.PI * 2);
